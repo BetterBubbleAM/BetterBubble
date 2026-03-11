@@ -18,57 +18,56 @@
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
+        let players = {};
+        let food = [];
         let myId = null;
-        let mouseX = 0;
-        let mouseY = 0;
 
         socket.on('connect', () => { myId = socket.id; });
+        socket.on('state', (data) => {
+            players = data.players;
+            food = data.food;
+        });
 
         window.addEventListener('mousemove', (e) => {
-            // Przeliczamy pozycję myszki względem świata
-            mouseX = e.clientX + (window.cameraX || 0);
-            mouseY = e.clientY + (window.cameraY || 0);
-            socket.emit('movement', { x: mouseX, y: mouseY });
+            const camX = players[myId] ? players[myId].x - canvas.width / 2 : 0;
+            const camY = players[myId] ? players[myId].y - canvas.height / 2 : 0;
+            socket.emit('movement', { x: e.clientX + camX, y: e.clientY + camY });
         });
 
-        socket.on('state', (data) => {
-            const me = data.players[myId];
-            if (!me) return;
-
-            // Kamera centruje się na Tobie
-            const camX = me.x - canvas.width / 2;
-            const camY = me.y - canvas.height / 2;
-            window.cameraX = camX;
-            window.cameraY = camY;
-
+        function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            ctx.save();
-            ctx.translate(-camX, -camY);
+            const me = players[myId];
 
-            // Rysowanie kropek
-            data.food.forEach(f => {
-                ctx.fillStyle = f.color;
-                ctx.beginPath();
-                ctx.arc(f.x, f.y, 8, 0, Math.PI * 2);
-                ctx.fill();
-            });
+            if (me) {
+                const camX = me.x - canvas.width / 2;
+                const camY = me.y - canvas.height / 2;
 
-            // Rysowanie graczy
-            for(let id in data.players) {
-                let p = data.players[id];
-                ctx.fillStyle = p.color;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.fillStyle = "white";
-                ctx.textAlign = "center";
-                ctx.font = "14px Arial";
-                ctx.fillText(id === myId ? "TY" : "GRACZ", p.x, p.y - p.size - 5);
+                ctx.save();
+                ctx.translate(-camX, -camY);
+
+                food.forEach(f => {
+                    ctx.fillStyle = f.color;
+                    ctx.beginPath();
+                    ctx.arc(f.x, f.y, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+
+                for(let id in players) {
+                    let p = players[id];
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = "white";
+                    ctx.textAlign = "center";
+                    ctx.fillText(id === myId ? "TY" : "GRACZ", p.x, p.y - p.size - 5);
+                }
+                ctx.restore();
             }
-            ctx.restore();
-        });
+            requestAnimationFrame(draw); // To zapewnia 60 FPS rysowania
+        }
+        draw();
     </script>
 </body>
 </html>
