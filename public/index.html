@@ -1,36 +1,53 @@
 <!DOCTYPE html>
-<html lang="pl">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BetterBubble - Gra</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BetterBubble.am Clone</title>
     <style>
-        body { margin: 0; background: #111; overflow: hidden; color: white; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background: #111; }
         canvas { display: block; }
-        #overlay { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <div id="overlay">
-        <b>BetterBubble</b><br>
-        Graczy online: <span id="count">0</span>
-    </div>
-    <canvas id="gameCanvas"></canvas>
-    
+    <canvas id="canvas"></canvas>
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        const canvas = document.getElementById('gameCanvas');
+        const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
-        socket.on('connect', () => {
-            console.log("Połączono z serwerem!");
-        });
+        let mouse = { x: canvas.width/2, y: canvas.height/2 };
 
-        // Tu będzie rysowanie kulek w czasie rzeczywistym
+        // Sterowanie myszką/dotykiem
+        window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+        window.addEventListener('touchmove', e => { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; });
+
+        setInterval(() => {
+            socket.emit('movement', { x: mouse.x, y: mouse.y });
+        }, 1000/60);
+
+        socket.on('state', (data) => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Rysuj jedzenie
+            data.food.forEach(f => {
+                ctx.fillStyle = f.color;
+                ctx.beginPath();
+                ctx.arc(f.x, f.y, 5, 0, Math.PI*2);
+                ctx.fill();
+            });
+
+            // Rysuj graczy
+            for (let id in data.players) {
+                let p = data.players[id];
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+                ctx.fill();
+            }
+        });
     </script>
 </body>
 </html>
