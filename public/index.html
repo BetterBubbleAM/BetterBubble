@@ -2,54 +2,56 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>BetterBubble.am - Original Source</title>
+    <title>BetterBubble.am - 1:1 Clone</title>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background-color: #f2fbff; font-family: 'Ubuntu', sans-serif; }
         canvas { display: block; }
-        #gui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #stats { position: absolute; bottom: 10px; left: 10px; color: #555; font-weight: bold; }
+        #leaderboard {
+            position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.4);
+            color: white; padding: 15px; border-radius: 5px; min-width: 160px;
+        }
         #overlay {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: white; padding: 30px; border-radius: 10px; text-align: center;
-            box-shadow: 0 0 20px rgba(0,0,0,0.2); pointer-events: auto;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3); pointer-events: auto;
         }
-        #leaderboard {
-            position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.5);
-            color: white; padding: 15px; border-radius: 5px; min-width: 150px;
-        }
-        input { padding: 10px; margin: 10px; border: 1px solid #ccc; border-radius: 5px; width: 200px; }
-        button { padding: 10px 20px; background: #008cff; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        input { padding: 12px; margin: 10px; border: 1px solid #ddd; border-radius: 5px; width: 220px; font-size: 16px; outline: none; }
+        button { padding: 12px 25px; background: #008cff; color: white; border: none; cursor: pointer; border-radius: 5px; font-weight: bold; font-size: 16px; }
     </style>
 </head>
 <body>
-
-    <div id="gui">
+    <div id="hud">
         <div id="overlay">
             <h1>BetterBubble.am</h1>
-            <input type="text" id="nick" placeholder="Nick" maxlength="15">
+            <input type="text" id="nickInput" placeholder="Nick" maxlength="15">
             <br>
-            <button id="play">GRAJ</button>
+            <button id="startBtn">Graj</button>
         </div>
         <div id="leaderboard">
-            <div id="list"></div>
+            <h4 style="margin:0 0 10px 0">Ranking</h4>
+            <div id="leaderList"></div>
         </div>
+        <div id="stats">Masa: <span id="massVal">0</span></div>
     </div>
-
-    <canvas id="canvas"></canvas>
+    <canvas id="gameCanvas"></canvas>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        const canvas = document.getElementById('canvas');
+        const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
         
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
-        let players = {}, food = [], viruses = [], myId = null;
-        let camX = 0, camY = 0, isPlaying = false;
+        let players = {}, food = [], viruses = [], myId = null, isPlaying = false;
+        let camX = 0, camY = 0, camZoom = 1;
 
-        document.getElementById('play').onclick = () => {
-            socket.emit('join', document.getElementById('nick').value || "Adrian");
+        startBtn.onclick = () => {
+            socket.emit('join', document.getElementById('nickInput').value || "Adrian");
             document.getElementById('overlay').style.display = 'none';
             isPlaying = true;
         };
@@ -63,8 +65,7 @@
 
         window.onmousemove = e => {
             if (!isPlaying) return;
-            const angle = Math.atan2(e.clientY - canvas.height/2, e.clientX - canvas.width/2);
-            socket.emit('move', angle);
+            socket.emit('move', Math.atan2(e.clientY - canvas.height/2, e.clientX - canvas.width/2));
         };
 
         window.onkeydown = e => {
@@ -76,21 +77,21 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             const me = players[myId];
 
-            if (me && me.cells && me.cells.length > 0) {
-                // Obliczanie środka kamery
-                let avgX = 0, avgY = 0;
-                me.cells.forEach(c => { avgX += c.x; avgY += c.y; });
-                avgX /= me.cells.length;
-                avgY /= me.cells.length;
+            if (me && me.cells.length > 0) {
+                let avgX = 0, avgY = 0, totalSize = 0;
+                me.cells.forEach(c => { avgX += c.x; avgY += c.y; totalSize += c.size; });
+                avgX /= me.cells.length; avgY /= me.cells.length;
 
-                camX += (avgX - canvas.width / 2 - camX) * 0.1;
-                camY += (avgY - canvas.height / 2 - camY) * 0.1;
+                camX += (avgX - canvas.width/2 - camX) * 0.1;
+                camY += (avgY - canvas.height/2 - camY) * 0.1;
+                document.getElementById('massVal').innerText = Math.floor(totalSize);
 
                 ctx.save();
                 ctx.translate(-camX, -camY);
 
                 // Siatka
-                ctx.strokeStyle = "#e8e8e8";
+                ctx.strokeStyle = "#eee"; ctx.lineWidth = 1;
+                ctx.beginPath();
                 for(let x=0; x<=3000; x+=50) { ctx.moveTo(x,0); ctx.lineTo(x,3000); }
                 for(let y=0; y<=3000; y+=50) { ctx.moveTo(0,y); ctx.lineTo(3000,y); }
                 ctx.stroke();
@@ -98,30 +99,33 @@
                 // Jedzenie
                 food.forEach(f => {
                     ctx.fillStyle = f.color; ctx.beginPath();
-                    ctx.arc(f.x, f.y, 7, 0, Math.PI*2); ctx.fill();
+                    ctx.arc(f.x, f.y, f.size, 0, Math.PI*2); ctx.fill();
                 });
 
                 // Wirusy
                 viruses.forEach(v => {
-                    ctx.fillStyle = "#33ff33"; ctx.beginPath();
-                    ctx.arc(v.x, v.y, v.size, 0, Math.PI*2); ctx.fill();
-                    ctx.strokeStyle = "#2ecc71"; ctx.lineWidth = 5; ctx.stroke();
+                    ctx.fillStyle = "#33ff33"; ctx.strokeStyle = "#2ecc71"; ctx.lineWidth = 5;
+                    ctx.beginPath(); ctx.arc(v.x, v.y, v.size, 0, Math.PI*2); ctx.fill(); ctx.stroke();
                 });
 
                 // Gracze
                 for (let id in players) {
-                    players[id].cells.forEach(cell => {
-                        ctx.fillStyle = players[id].color; ctx.beginPath();
+                    const p = players[id];
+                    p.cells.forEach(cell => {
+                        ctx.fillStyle = p.color; ctx.beginPath();
                         ctx.arc(cell.x, cell.y, cell.size, 0, Math.PI*2); ctx.fill();
+                        ctx.strokeStyle = "rgba(0,0,0,0.1)"; ctx.lineWidth = 3; ctx.stroke();
+                        
                         ctx.fillStyle = "white"; ctx.textAlign = "center";
-                        ctx.fillText(players[id].name, cell.x, cell.y);
+                        ctx.font = `bold ${cell.size/2.5}px Arial`;
+                        ctx.fillText(p.name, cell.x, cell.y + cell.size/6);
                     });
                 }
                 ctx.restore();
 
-                // Ranking
-                const top = Object.values(players).sort((a,b) => b.score - a.score).slice(0,5);
-                document.getElementById('list').innerHTML = top.map((p,i) => `<div>${i+1}. ${p.name}</div>`).join('');
+                const top = Object.values(players).sort((a,b) => b.score - a.score).slice(0,10);
+                document.getElementById('leaderList').innerHTML = top.map((p,i) => 
+                    `<div class="leader-item"><span>${i+1}. ${p.name}</span></div>`).join('');
             }
             requestAnimationFrame(draw);
         }
