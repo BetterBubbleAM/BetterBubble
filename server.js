@@ -3,19 +3,46 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 
-// Serwowanie plików gry (grafika, index.html)
 app.use(express.static(__dirname + '/public'));
 
-io.on('connection', (socket) => {
-    console.log('Nowy gracz dołączył!');
+let players = {};
+let food = [];
 
-    // Tutaj dodamy logikę poruszania się kulek i jedzenia
+// Generujemy 200 kawałków jedzenia na mapie
+for(let i=0; i<200; i++) {
+    food.push({
+        x: Math.random() * 2000, 
+        y: Math.random() * 2000, 
+        color: `hsl(${Math.random() * 360}, 100%, 50%)`
+    });
+}
+
+io.on('connection', (socket) => {
+    // Tworzymy kulkę gracza przy połączeniu
+    players[socket.id] = {
+        x: 1000,
+        y: 1000,
+        size: 20,
+        color: `hsl(${Math.random() * 360}, 100%, 50%)`
+    };
+
+    socket.on('movement', (data) => {
+        if(players[socket.id]) {
+            // Płynny ruch w stronę myszki
+            players[socket.id].x += (data.x - windowWidth/2) * 0.1; // To dopracujemy w kliencie
+            players[socket.id].x = data.x; 
+            players[socket.id].y = data.y;
+        }
+    });
+
     socket.on('disconnect', () => {
-        console.log('Gracz wyszedł z gry.');
+        delete players[socket.id];
     });
 });
 
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-    console.log('Serwer BetterBubble działa na porcie ' + PORT);
-});
+setInterval(() => {
+    io.emit('state', { players, food });
+}, 1000 / 60);
+
+const PORT = process.env.PORT || 10000;
+http.listen(PORT, () => { console.log('Serwer BetterBubble działa!'); });
