@@ -12,6 +12,7 @@ function createFood() {
     return { x: Math.random()*MAP_SIZE, y: Math.random()*MAP_SIZE, color: `hsl(${Math.random()*360}, 100%, 50%)`, size: 7 };
 }
 
+// Inicjalizacja świata
 for(let i=0; i<400; i++) food.push(createFood());
 for(let i=0; i<10; i++) viruses.push({ x: Math.random()*(MAP_SIZE-200)+100, y: Math.random()*(MAP_SIZE-200)+100, size: 60 });
 
@@ -53,6 +54,7 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => { delete players[socket.id]; });
 });
 
+// Pętla fizyki (30 FPS dla oszczędności Render.com)
 setInterval(() => {
     for (let id in players) {
         let p = players[id];
@@ -68,6 +70,7 @@ setInterval(() => {
             cell.y = Math.max(cell.size, Math.min(MAP_SIZE - cell.size, cell.y));
             total += cell.size;
 
+            // Kolizja z jedzeniem
             food.forEach((f, fIdx) => {
                 if(Math.hypot(cell.x - f.x, cell.y - f.y) < cell.size) {
                     cell.size += f.isEjected ? 1.5 : 0.4;
@@ -75,21 +78,10 @@ setInterval(() => {
                     if(!f.isEjected) food.push(createFood());
                 }
             });
-            
-            // Łączenie kulek
-            for(let j=idx+1; j<p.cells.length; j++) {
-                let other = p.cells[j];
-                let dist = Math.hypot(cell.x - other.x, cell.y - other.y);
-                if(dist < (cell.size + other.size) * 0.3 && Date.now() - cell.lastSplit > 10000) {
-                    cell.size = Math.sqrt(cell.size**2 + other.size**2);
-                    p.cells.splice(j, 1);
-                }
-            }
         });
         p.score = total;
     }
-    food.forEach(f => { if(f.isEjected) { f.x += f.vX; f.y += f.vY; f.vX *= 0.9; f.vY *= 0.9; } });
     io.emit('update', { players, food, viruses });
-}, 30); // Zmniejszona częstotliwość dla stabilności
+}, 33);
 
-http.listen(3000, () => { console.log('Server Smooth Run!'); });
+http.listen(3000, () => { console.log('Baza Agar.io gotowa!'); });
