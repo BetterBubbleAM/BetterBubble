@@ -2,35 +2,37 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>BetterBubble.am</title>
+    <title>BetterBubble</title>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background-color: #f2fbff; font-family: Arial, sans-serif; }
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #f2fbff; font-family: 'Ubuntu', sans-serif; }
         canvas { display: block; }
         #overlay {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: white; padding: 30px; border-radius: 15px; text-align: center;
-            box-shadow: 0 0 20px rgba(0,0,0,0.2); z-index: 100;
+            background: rgba(255,255,255,0.9); padding: 40px; border-radius: 20px; text-align: center;
+            box-shadow: 0 0 30px rgba(0,0,0,0.1); z-index: 100;
         }
-        input { padding: 12px; margin: 10px; border: 1px solid #ccc; border-radius: 8px; width: 220px; font-size: 16px; }
-        button { padding: 12px 25px; background: #008cff; color: white; border: none; cursor: pointer; border-radius: 8px; font-weight: bold; }
+        input { padding: 15px; margin: 15px; border: 2px solid #ddd; border-radius: 10px; width: 250px; font-size: 18px; outline: none; }
+        button { padding: 15px 30px; background: #008cff; color: white; border: none; cursor: pointer; border-radius: 10px; font-weight: bold; font-size: 18px; transition: 0.2s; }
+        button:hover { background: #0070cc; transform: scale(1.05); }
         #leaderboard {
-            position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.6);
-            color: white; padding: 15px; border-radius: 8px; min-width: 160px; pointer-events: none;
+            position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.5);
+            color: white; padding: 20px; border-radius: 10px; min-width: 200px; pointer-events: none;
         }
-        .leader-item { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; }
+        .leader-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 16px; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <h1>BetterBubble.am</h1>
-        <input type="text" id="nickInput" placeholder="Twój Nick" maxlength="15">
+        <h1 style="color: #333; margin-bottom: 5px;">BetterBubble.am</h1>
+        <p style="color: #777; margin-top: 0;">Inspirowane Agar.io</p>
+        <input type="text" id="nickInput" placeholder="Podaj nick..." maxlength="15">
         <br>
         <button id="startBtn">GRAJ TERAZ</button>
     </div>
 
     <div id="leaderboard">
-        <h3>Ranking</h3>
+        <h3 style="margin-top: 0; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px;">Ranking</h3>
         <div id="leaderList"></div>
     </div>
 
@@ -47,35 +49,21 @@
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
-        let players = {};
-        let food = [];
-        let mapSize = 3000;
-        let myId = null;
-        let isPlaying = false;
-        let camX = 0, camY = 0;
-        let lerpPositions = {};
+        let players = {}, food = [], viruses = [], myId = null, isPlaying = false;
+        let camX = 0, camY = 0, mapSize = 3000;
 
-        // Start gry przez przycisk
         startBtn.addEventListener('click', () => {
-            const nick = document.getElementById('nickInput').value || "Gość";
+            const nick = document.getElementById('nickInput').value || "Adrian";
             socket.emit('join', nick);
             overlay.style.display = 'none';
             isPlaying = true;
         });
 
-        socket.on('init', (data) => { 
-            myId = data.id; 
-            if(data.mapSize) mapSize = data.mapSize;
-        });
-
-        socket.on('update', (data) => {
-            players = data.players;
-            food = data.food;
-        });
-
-        socket.on('died', () => {
-            isPlaying = false;
-            overlay.style.display = 'block';
+        socket.on('init', (data) => { myId = data.id; mapSize = data.mapSize; });
+        socket.on('update', (data) => { 
+            players = data.players; 
+            food = data.food; 
+            viruses = data.viruses;
         });
 
         window.addEventListener('mousemove', (e) => {
@@ -91,16 +79,14 @@
         });
 
         function drawGrid() {
-            const size = 50;
-            ctx.strokeStyle = "#e0e0e0";
+            const size = 60;
+            ctx.strokeStyle = "rgba(0,0,0,0.05)";
             ctx.lineWidth = 1;
             ctx.beginPath();
-            const offX = (canvas.width / 2 - lerpPositions[myId].x) % size;
-            const offY = (canvas.height / 2 - lerpPositions[myId].y) % size;
-            for (let x = offX; x < canvas.width; x += size) {
+            for (let x = -camX % size; x < canvas.width; x += size) {
                 ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
             }
-            for (let y = offY; y < canvas.height; y += size) {
+            for (let y = -camY % size; y < canvas.height; y += size) {
                 ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
             }
             ctx.stroke();
@@ -110,53 +96,73 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             const me = players[myId];
 
-            if (me) {
-                if (!lerpPositions[myId]) lerpPositions[myId] = { x: me.x, y: me.y };
-                lerpPositions[myId].x += (me.x - lerpPositions[myId].x) * 0.2;
-                lerpPositions[myId].y += (me.y - lerpPositions[myId].y) * 0.2;
+            if (me && me.cells.length > 0) {
+                let avgX = 0, avgY = 0;
+                me.cells.forEach(c => { avgX += c.x; avgY += c.y; });
+                avgX /= me.cells.length;
+                avgY /= me.cells.length;
 
-                camX = lerpPositions[myId].x - canvas.width / 2;
-                camY = lerpPositions[myId].y - canvas.height / 2;
+                camX += (avgX - canvas.width / 2 - camX) * 0.1;
+                camY += (avgY - canvas.height / 2 - camY) * 0.1;
 
                 drawGrid();
                 ctx.save();
                 ctx.translate(-camX, -camY);
 
                 // Granice mapy
-                ctx.strokeStyle = "#ff4444";
-                ctx.lineWidth = 10;
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 15;
                 ctx.strokeRect(0, 0, mapSize, mapSize);
 
                 // Jedzenie
                 food.forEach(f => {
                     ctx.fillStyle = f.color;
                     ctx.beginPath();
-                    ctx.arc(f.x, f.y, f.size || 8, 0, Math.PI * 2);
+                    ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
                     ctx.fill();
+                });
+
+                // Wirusy
+                viruses.forEach(v => {
+                    ctx.fillStyle = "#33ff33";
+                    ctx.beginPath();
+                    for(let i=0; i<16; i++){
+                        let angle = (i/16) * Math.PI * 2;
+                        let r = (i%2 === 0) ? v.size : v.size * 1.2;
+                        ctx.lineTo(v.x + Math.cos(angle)*r, v.y + Math.sin(angle)*r);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.strokeStyle = "#22cc22";
+                    ctx.lineWidth = 4;
+                    ctx.stroke();
                 });
 
                 // Gracze
                 for (let id in players) {
                     const p = players[id];
-                    if (!lerpPositions[id]) lerpPositions[id] = { x: p.x, y: p.y };
-                    lerpPositions[id].x += (p.x - lerpPositions[id].x) * 0.2;
-                    lerpPositions[id].y += (p.y - lerpPositions[id].y) * 0.2;
+                    p.cells.forEach(cell => {
+                        ctx.fillStyle = p.color;
+                        ctx.beginPath();
+                        ctx.arc(cell.x, cell.y, cell.size, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.strokeStyle = "rgba(0,0,0,0.1)";
+                        ctx.lineWidth = 4;
+                        ctx.stroke();
 
-                    ctx.fillStyle = p.color;
-                    ctx.beginPath();
-                    ctx.arc(lerpPositions[id].x, lerpPositions[id].y, p.size, 0, Math.PI * 2);
-                    ctx.fill();
-                    
-                    ctx.fillStyle = "white";
-                    ctx.font = `bold ${Math.max(12, p.size/2.5)}px Arial`;
-                    ctx.textAlign = "center";
-                    ctx.fillText(p.name, lerpPositions[id].x, lerpPositions[id].y + 5);
+                        ctx.fillStyle = "white";
+                        ctx.font = `bold ${cell.size/2.5}px Arial`;
+                        ctx.textAlign = "center";
+                        ctx.fillText(p.name, cell.x, cell.y);
+                        ctx.font = `${cell.size/4}px Arial`;
+                        ctx.fillText(Math.floor(cell.size), cell.x, cell.y + cell.size/2.5);
+                    });
                 }
                 ctx.restore();
 
-                const sorted = Object.values(players).sort((a, b) => b.size - a.size).slice(0, 10);
+                const sorted = Object.values(players).sort((a, b) => b.score - a.score).slice(0, 10);
                 document.getElementById('leaderList').innerHTML = sorted.map((p, i) => 
-                    `<div class="leader-item"><span>${i+1}. ${p.name}</span><span>${Math.floor(p.size)}</span></div>`
+                    `<div class="leader-item"><span>${i+1}. ${p.name}</span><span>${Math.floor(p.score)}</span></div>`
                 ).join('');
             }
             requestAnimationFrame(draw);
