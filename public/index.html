@@ -55,10 +55,8 @@ let smoothPositions = {};
 
                 for(let id in players) {
                     for(let id in players) {
-    let p = players[id];
-
-    // Jeśli gracz pojawił się pierwszy raz, zapisz jego startową pozycję
-    if (!smoothPositions[id]) {
+    smoothPositions[id].x += (p.x - smoothPositions[id].x) * 0.08;
+smoothPositions[id].y += (p.y - smoothPositions[id].y) * 0.08;
         smoothPositions[id] = { x: p.x, y: p.y };
     }
 
