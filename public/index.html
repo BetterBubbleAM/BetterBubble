@@ -1,19 +1,37 @@
 <!DOCTYPE html>
-<html>
+<html lang="pl">
 <head>
-    <title>BetterBubble.am</title>
+    <meta charset="UTF-8">
+    <title>BetterBubble - Agar Clone</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #111; }
-        canvas { display: block; background-image: radial-gradient(#333 1px, transparent 1px); background-size: 30px 30px; }
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #f2fbff; }
+        canvas { display: block; }
+        /* Styl menu startowego */
+        #overlay {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.9); padding: 20px; border-radius: 10px;
+            text-align: center; font-family: 'Arial', sans-serif; box-shadow: 0 0 20px rgba(0,0,0,0.2);
+        }
+        input { padding: 10px; margin: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        button { padding: 10px 20px; background: #008cff; color: white; border: none; cursor: pointer; border-radius: 5px; }
     </style>
 </head>
 <body>
+
+    <div id="overlay">
+        <h1>BetterBubble</h1>
+        <input type="text" id="nickInput" placeholder="Twój Nick" maxlength="15">
+        <button onclick="startGame()">Graj!</button>
+    </div>
+
     <canvas id="gameCanvas"></canvas>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('overlay');
 
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
@@ -21,76 +39,86 @@
         let players = {};
         let food = [];
         let myId = null;
-        let smoothPositions = {};
-        let camSmoothX = 0;
-        let camSmoothY = 0;
+        let isPlaying = false;
 
-        socket.on('connect', () => { myId = socket.id; });
+        // Zmienne do płynności (Interpolacja)
+        let camX = 0, camY = 0;
+        let lerpPositions = {};
 
-        socket.on('gameUpdate', (data) => {
+        function startGame() {
+            const nick = document.getElementById('nickInput').value || "Bezimienny";
+            socket.emit('join', nick);
+            overlay.style.display = 'none';
+            isPlaying = true;
+        }
+
+        socket.on('init', (id) => { myId = id; });
+
+        socket.on('update', (data) => {
             players = data.players;
             food = data.food;
         });
 
         window.addEventListener('mousemove', (e) => {
-            // Przesyłamy pozycję myszki względem świata gry
-            socket.emit('movement', { 
-                x: e.clientX + camSmoothX, 
-                y: e.clientY + camSmoothY 
-            });
+            if (!isPlaying) return;
+            // Wysyłamy kąt ruchu zamiast samej pozycji myszki (bardziej precyzyjne)
+            const angle = Math.atan2(e.clientY - canvas.height / 2, e.clientX - canvas.width / 2);
+            socket.emit('move', angle);
         });
+
+        function drawGrid() {
+            const size = 50;
+            ctx.strokeStyle = "#e0e0e0";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let x = -camX % size; x < canvas.width; x += size) {
+                ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
+            }
+            for (let y = -camY % size; y < canvas.height; y += size) {
+                ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
+            }
+            ctx.stroke();
+        }
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
             const me = players[myId];
-
             if (me) {
-                // Inicjalizacja wygładzania
-                if (!smoothPositions[myId]) {
-                    smoothPositions[myId] = { x: me.x, y: me.y };
-                    camSmoothX = me.x - canvas.width / 2;
-                    camSmoothY = me.y - canvas.height / 2;
-                }
+                // Kamera wyśrodkowana na graczu
+                camX = me.x - canvas.width / 2;
+                camY = me.y - canvas.height / 2;
 
-                // Płynna kamera
-                const targetCamX = smoothPositions[myId].x - canvas.width / 2;
-                const targetCamY = smoothPositions[myId].y - canvas.height / 2;
-                camSmoothX += (targetCamX - camSmoothX) * 0.1;
-                camSmoothY += (targetCamY - camSmoothY) * 0.1;
+                drawGrid();
 
                 ctx.save();
-                ctx.translate(-camSmoothX, -camSmoothY);
+                ctx.translate(-camX, -camY);
 
-                // Rysowanie jedzenia
+                // Rysuj jedzenie
                 food.forEach(f => {
                     ctx.fillStyle = f.color;
                     ctx.beginPath();
-                    ctx.arc(f.x, f.y, 8, 0, Math.PI * 2);
+                    ctx.arc(f.x, f.y, 10, 0, Math.PI * 2);
                     ctx.fill();
                 });
 
-                // Rysowanie graczy
+                // Rysuj graczy
                 for (let id in players) {
-                    let p = players[id];
-                    if (!smoothPositions[id]) smoothPositions[id] = { x: p.x, y: p.y };
-
-                    // Interpolacja pozycji
-                    smoothPositions[id].x += (p.x - smoothPositions[id].x) * 0.12;
-                    smoothPositions[id].y += (p.y - smoothPositions[id].y) * 0.12;
-
+                    const p = players[id];
                     ctx.fillStyle = p.color;
                     ctx.beginPath();
-                    ctx.arc(smoothPositions[id].x, smoothPositions[id].y, p.size, 0, Math.PI * 2);
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
                     ctx.fill();
                     
-                    // Nazwa gracza
-                    ctx.fillStyle = "white";
+                    // Nick
+                    ctx.fillStyle = "black";
+                    ctx.font = `bold ${Math.max(12, p.size/3)}px Arial`;
                     ctx.textAlign = "center";
-                    ctx.font = "bold 14px Arial";
-                    ctx.fillText(id === myId ? "TY" : "GRACZ", smoothPositions[id].x, smoothPositions[id].y - p.size - 5);
+                    ctx.fillText(p.name, p.x, p.y + (p.size/10));
                 }
                 ctx.restore();
             }
+
             requestAnimationFrame(draw);
         }
         draw();
