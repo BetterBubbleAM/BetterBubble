@@ -2,20 +2,20 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>BetterBubble.am</title>
+    <title>BetterBubble.am - Full Clone</title>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background-color: #f2fbff; font-family: Arial, sans-serif; }
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #f2fbff; font-family: 'Arial', sans-serif; }
         canvas { display: block; }
         #overlay {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: white; padding: 30px; border-radius: 15px; text-align: center;
             box-shadow: 0 0 20px rgba(0,0,0,0.2); z-index: 100;
         }
-        input { padding: 10px; margin: 10px; border: 1px solid #ccc; border-radius: 5px; width: 200px; }
-        button { padding: 10px 20px; background: #008cff; color: white; border: none; cursor: pointer; border-radius: 5px; font-weight: bold; }
+        input { padding: 12px; margin: 10px; border: 1px solid #ccc; border-radius: 8px; width: 220px; font-size: 16px; }
+        button { padding: 12px 25px; background: #008cff; color: white; border: none; cursor: pointer; border-radius: 8px; font-weight: bold; font-size: 16px; }
         #leaderboard {
-            position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.5);
-            color: white; padding: 15px; border-radius: 5px; min-width: 150px; pointer-events: none;
+            position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.6);
+            color: white; padding: 15px; border-radius: 8px; min-width: 160px; pointer-events: none;
         }
         .leader-item { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; }
     </style>
@@ -54,7 +54,6 @@
         let camX = 0, camY = 0;
         let lerpPositions = {};
 
-        // Zamiast onclick w HTML, robimy to tutaj - bezpieczniej
         startBtn.addEventListener('click', () => {
             const nick = document.getElementById('nickInput').value || "Gość";
             socket.emit('join', nick);
@@ -74,59 +73,29 @@
             socket.emit('move', angle);
         });
 
+        window.addEventListener('keydown', (e) => {
+            if (!isPlaying) return;
+            if (e.code === 'Space') socket.emit('split');
+            if (e.code === 'KeyW') socket.emit('eject');
+        });
+
+        function drawGrid() {
+            const size = 50;
+            ctx.strokeStyle = "#e0e0e0";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let x = (canvas.width / 2 - lerpPositions[myId].x) % size; x < canvas.width; x += size) {
+                ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
+            }
+            for (let y = (canvas.height / 2 - lerpPositions[myId].y) % size; y < canvas.height; y += size) {
+                ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
+            }
+            ctx.stroke();
+        }
+
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             const me = players[myId];
 
             if (me) {
                 if (!lerpPositions[myId]) lerpPositions[myId] = { x: me.x, y: me.y };
-                
-                // Płynny ruch
-                lerpPositions[myId].x += (me.x - lerpPositions[myId].x) * 0.15;
-                lerpPositions[myId].y += (me.y - lerpPositions[myId].y) * 0.15;
-
-                camX = lerpPositions[myId].x - canvas.width / 2;
-                camY = lerpPositions[myId].y - canvas.height / 2;
-
-                ctx.save();
-                ctx.translate(-camX, -camY);
-
-                // Jedzenie
-                food.forEach(f => {
-                    ctx.fillStyle = f.color;
-                    ctx.beginPath();
-                    ctx.arc(f.x, f.y, 8, 0, Math.PI * 2);
-                    ctx.fill();
-                });
-
-                // Gracze
-                for (let id in players) {
-                    const p = players[id];
-                    if (!lerpPositions[id]) lerpPositions[id] = { x: p.x, y: p.y };
-                    lerpPositions[id].x += (p.x - lerpPositions[id].x) * 0.15;
-                    lerpPositions[id].y += (p.y - lerpPositions[id].y) * 0.15;
-
-                    ctx.fillStyle = p.color;
-                    ctx.beginPath();
-                    ctx.arc(lerpPositions[id].x, lerpPositions[id].y, p.size, 0, Math.PI * 2);
-                    ctx.fill();
-
-                    ctx.fillStyle = "black";
-                    ctx.font = "14px Arial";
-                    ctx.textAlign = "center";
-                    ctx.fillText(p.name, lerpPositions[id].x, lerpPositions[id].y + 5);
-                }
-                ctx.restore();
-
-                // Ranking
-                const sorted = Object.values(players).sort((a, b) => b.size - a.size).slice(0, 5);
-                document.getElementById('leaderList').innerHTML = sorted.map((p, i) => 
-                    `<div class="leader-item"><span>${i+1}. ${p.name}</span><span>${Math.floor(p.size)}</span></div>`
-                ).join('');
-            }
-            requestAnimationFrame(draw);
-        }
-        draw();
-    </script>
-</body>
-</html>
