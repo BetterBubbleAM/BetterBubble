@@ -3,17 +3,17 @@
 <head>
     <title>BetterBubble.am</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; }
-        canvas { display: block; }
+        body { margin: 0; overflow: hidden; background: #111; }
+        canvas { display: block; background-image: radial-gradient(#333 1px, transparent 1px); background-size: 30px 30px; }
     </style>
 </head>
 <body>
-    <canvas id="ctx"></canvas>
+    <canvas id="gameCanvas"></canvas>
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const canvas = document.getElementById('ctx');
-        const ctx = canvas.getContext('2d');
         const socket = io();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
 
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
@@ -21,93 +21,77 @@
         let players = {};
         let food = [];
         let myId = null;
+        let smoothPositions = {};
+        let camSmoothX = 0;
+        let camSmoothY = 0;
 
         socket.on('connect', () => { myId = socket.id; });
-        socket.on('state', (data) => {
+
+        socket.on('gameUpdate', (data) => {
             players = data.players;
             food = data.food;
         });
 
         window.addEventListener('mousemove', (e) => {
-            const camX = players[myId] ? players[myId].x - canvas.width / 2 : 0;
-            const camY = players[myId] ? players[myId].y - canvas.height / 2 : 0;
-            socket.emit('movement', { x: e.clientX + camSmoothX, y: e.clientY + camSmoothY });
-});
-
-// Zmienne do płynnego ruchu - dopisane tutaj, aby gra ich nie "zapominała"
-let smoothPositions = {};
-let camSmoothX = 0;
-let camSmoothY = 0;
-
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const me = players[myId];
-
-    if (me) {
-        // Jeśli Twoja kulka pojawiła się pierwszy raz, ustaw start kamery
-        if (!smoothPositions[myId]) {
-            smoothPositions[myId] = { x: me.x, y: me.y };
-            camSmoothX = me.x - canvas.width / 2;
-            camSmoothY = me.y - canvas.height / 2;
-        }
-
-        // 1. Obliczamy cel kamery (środek ekranu na Tobie)
-        const targetCamX = smoothPositions[myId].x - canvas.width / 2;
-        const targetCamY = smoothPositions[myId].y - canvas.height / 2;
-
-        // 2. Wygładzamy ruch kamery (0.05 - bardzo płynny, "powolny" ruch)
-        camSmoothX += (targetCamX - camSmoothX) * 0.05;
-        camSmoothY += (targetCamY - camSmoothY) * 0.05;
-
-        ctx.save();
-        ctx.translate(-camSmoothX, -camSmoothY);
-
-        // Rysowanie jedzenia
-        food.forEach(f => {
-            ctx.fillStyle = f.color;
-            ctx.beginPath();
-            ctx.arc(f.x, f.y, 8, 0, Math.PI * 2);
-            ctx.fill();
+            // Przesyłamy pozycję myszki względem świata gry
+            socket.emit('movement', { 
+                x: e.clientX + camSmoothX, 
+                y: e.clientY + camSmoothY 
+            });
         });
 
-        // Rysowanie graczy z wygładzaniem
-        for (let id in players) {
-            let p = players[id];
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const me = players[myId];
 
-            // Jeśli nowy gracz wejdzie na serwer, stwórz mu punkt startowy
-            if (!smoothPositions[id]) {
-                smoothPositions[id] = { x: p.x, y: p.y };
-            }
+            if (me) {
+                // Inicjalizacja wygładzania
+                if (!smoothPositions[myId]) {
+                    smoothPositions[myId] = { x: me.x, y: me.y };
+                    camSmoothX = me.x - canvas.width / 2;
+                    camSmoothY = me.y - canvas.height / 2;
+                }
 
-            // SPOWOLNIENIE KULKI: 0.08 sprawia, że kulka płynie, a nie skacze
-            smoothPositions[id].x += (p.x - smoothPositions[id].x) * 0.08;
-            smoothPositions[id].y += (p.y - smoothPositions[id].y) * 0.08;
+                // Płynna kamera
+                const targetCamX = smoothPositions[myId].x - canvas.width / 2;
+                const targetCamY = smoothPositions[myId].y - canvas.height / 2;
+                camSmoothX += (targetCamX - camSmoothX) * 0.1;
+                camSmoothY += (targetCamY - camSmoothY) * 0.1;
 
-            ctx.fillStyle = p.color;
-            ctx.beginPath();
-            ctx.arc(smoothPositions[id].x, smoothPositions[id].y, p.size, 0, Math.PI * 2);
-            ctx.fill();
+                ctx.save();
+                ctx.translate(-camSmoothX, -camSmoothY);
 
-            // Napisy nad kulkami (również wygładzone)
-            ctx.fillStyle = "white";
-            ctx.textAlign = "center";
-            ctx.fillText(id === myId ? "TY" : "GRACZ", smoothPositions[id].x, smoothPositions[id].y - p.size - 5);
-        }
+                // Rysowanie jedzenia
+                food.forEach(f => {
+                    ctx.fillStyle = f.color;
+                    ctx.beginPath();
+                    ctx.arc(f.x, f.y, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                });
 
-        ctx.restore();
-    }
-    requestAnimationFrame(draw);
-}
+                // Rysowanie graczy
+                for (let id in players) {
+                    let p = players[id];
+                    if (!smoothPositions[id]) smoothPositions[id] = { x: p.x, y: p.y };
 
-draw();
-    ctx.fill();
+                    // Interpolacja pozycji
+                    smoothPositions[id].x += (p.x - smoothPositions[id].x) * 0.12;
+                    smoothPositions[id].y += (p.y - smoothPositions[id].y) * 0.12;
+
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(smoothPositions[id].x, smoothPositions[id].y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Nazwa gracza
                     ctx.fillStyle = "white";
                     ctx.textAlign = "center";
-                    ctx.fillText(id === myId ? "TY" : "GRACZ", p.x, p.y - p.size - 5);
+                    ctx.font = "bold 14px Arial";
+                    ctx.fillText(id === myId ? "TY" : "GRACZ", smoothPositions[id].x, smoothPositions[id].y - p.size - 5);
                 }
                 ctx.restore();
             }
-            requestAnimationFrame(draw); // To zapewnia 60 FPS rysowania
+            requestAnimationFrame(draw);
         }
         draw();
     </script>
