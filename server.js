@@ -1,47 +1,78 @@
 const express = require('express');
-const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+const http = require('http');
+const socketIo = require('socket.io');
 
-app.use(express.static(__dirname + '/public'));
+const app = express();
+const server = http.createServer(app);
+const io = socketIo(server);
+
+app.use(express.static('public'));
 
 let players = {};
 let food = [];
+const MAP_SIZE = 2000;
 
-for(let i=0; i<150; i++) {
+// Tworzenie jedzenia na start
+for (let i = 0; i < 150; i++) {
     food.push({
-        x: Math.random() * 2000, 
-        y: Math.random() * 2000, 
+        id: i,
+        x: Math.random() * MAP_SIZE,
+        y: Math.random() * MAP_SIZE,
         color: `hsl(${Math.random() * 360}, 100%, 50%)`
     });
 }
 
 io.on('connection', (socket) => {
+    console.log('Nowy gracz:', socket.id);
+    
+    // Inicjalizacja gracza
     players[socket.id] = {
-        x: 1000, y: 1000, size: 25,
+        x: Math.random() * MAP_SIZE,
+        y: Math.random() * MAP_SIZE,
+        size: 20,
         color: `hsl(${Math.random() * 360}, 100%, 50%)`,
-        targetX: 1000, targetY: 1000
+        name: "Gość"
     };
 
     socket.on('movement', (data) => {
-        if(players[socket.id]) {
-            players[socket.id].targetX = data.x;
-            players[socket.id].targetY = data.y;
+        const player = players[socket.id];
+        if (player) {
+            // Obliczanie kierunku ruchu w stronę myszki
+            const dx = data.x - player.x;
+            const dy = data.y - player.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist > 5) {
+                const speed = 2 + (500 / player.size); // Im większy, tym wolniejszy
+                player.x += (dx / dist) * speed;
+                player.y += (dy / dist) * speed;
+            }
+
+            // Kolizja z jedzeniem
+            food.forEach((f, index) => {
+                const fdx = player.x - f.x;
+                const fdy = player.y - f.y;
+                if (Math.sqrt(fdx * fdx + fdy * fdy) < player.size) {
+                    player.size += 0.5;
+                    food[index] = {
+                        id: f.id,
+                        x: Math.random() * MAP_SIZE,
+                        y: Math.random() * MAP_SIZE,
+                        color: `hsl(${Math.random() * 360}, 100%, 50%)`
+                    };
+                }
+            });
         }
     });
 
-    socket.on('disconnect', () => { delete players[socket.id]; });
+    socket.on('disconnect', () => {
+        delete players[socket.id];
+    });
 });
 
-// Silnik serwera - płynne przesuwanie pozycji na serwerze
+// Wysyłanie danych do wszystkich 30 razy na sekundę (Tickrate)
 setInterval(() => {
-    for(let id in players) {
-        let p = players[id];
-        p.x += (p.targetX - p.x) * 0.15;
-        p.y += (p.targetY - p.y) * 0.15;
-    }
-    io.emit('state', { players, food });
-}, 1000 / 30); // 30 FPS wystarczy dla płynności przy interpolacji
+    io.emit('gameUpdate', { players, food });
+}, 1000 / 30);
 
-const PORT = process.env.PORT || 10000;
-http.listen(PORT, '0.0.0.0');
+server.listen(3000, () => console.log('Serwer działa na porcie 3000'));
