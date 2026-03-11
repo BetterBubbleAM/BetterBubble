@@ -9,8 +9,9 @@ let players = {};
 let food = [];
 const MAP_SIZE = 3000;
 
-for(let i=0; i<250; i++) {
-    food.push({ x: Math.random()*MAP_SIZE, y: Math.random()*MAP_SIZE, color: `hsl(${Math.random()*360}, 100%, 50%)` });
+// Generowanie jedzenia
+for(let i=0; i<200; i++) {
+    food.push({ x: Math.random()*MAP_SIZE, y: Math.random()*MAP_SIZE, color: `hsl(${Math.random()*360}, 100%, 50%)`, size: 8 });
 }
 
 io.on('connection', (socket) => {
@@ -23,7 +24,7 @@ io.on('connection', (socket) => {
             name: nick || "Gość",
             angle: 0
         };
-        socket.emit('init', socket.id);
+        socket.emit('init', { id: socket.id, mapSize: MAP_SIZE });
     });
 
     socket.on('move', (angle) => {
@@ -32,19 +33,22 @@ io.on('connection', (socket) => {
 
     socket.on('split', () => {
         let p = players[socket.id];
-        if (p && p.size >= 60) {
-            p.size /= 1.5; // Podstawowy mechanizm podziału (zmniejszenie)
+        if (p && p.size >= 50) {
+            p.size /= 1.8; // Efekt podziału
         }
     });
 
     socket.on('eject', () => {
         let p = players[socket.id];
-        if (p && p.size > 40) {
-            p.size -= 2;
+        if (p && p.size > 35) {
+            p.size -= 3;
+            // Dodajemy wyrzuconą masę jako specjalny rodzaj jedzenia
             food.push({ 
-                x: p.x + Math.cos(p.angle) * (p.size + 30), 
-                y: p.y + Math.sin(p.angle) * (p.size + 30), 
-                color: p.color 
+                x: p.x + Math.cos(p.angle) * (p.size + 40), 
+                y: p.y + Math.sin(p.angle) * (p.size + 40), 
+                color: p.color,
+                size: 12, // Wyrzucona masa jest większa niż zwykłe jedzenie
+                isEjected: true
             });
         }
     });
@@ -55,21 +59,25 @@ io.on('connection', (socket) => {
 setInterval(() => {
     for (let id in players) {
         let p = players[id];
-        let speed = 4.5 * (30 / p.size) + 1;
+        let speed = 4.5 * (30 / p.size) + 1.2;
         p.x += Math.cos(p.angle) * speed;
         p.y += Math.sin(p.angle) * speed;
 
-        p.x = Math.max(0, Math.min(MAP_SIZE, p.x));
-        p.y = Math.max(0, Math.min(MAP_SIZE, p.y));
+        // Blokada na granicach mapy
+        p.x = Math.max(p.size, Math.min(MAP_SIZE - p.size, p.x));
+        p.y = Math.max(p.size, Math.min(MAP_SIZE - p.size, p.y));
 
+        // Zjadanie
         food.forEach((f, index) => {
             if (Math.hypot(p.x - f.x, p.y - f.y) < p.size) {
-                p.size += 0.5;
-                food[index] = { x: Math.random()*MAP_SIZE, y: Math.random()*MAP_SIZE, color: f.color };
+                p.size += (f.isEjected ? 2 : 0.6); // Więcej masy za zjedzenie W
+                food.splice(index, 1);
+                if(!f.isEjected) { // Odradzaj tylko zwykłe jedzenie
+                   food.push({ x: Math.random()*MAP_SIZE, y: Math.random()*MAP_SIZE, color: `hsl(${Math.random()*360}, 100%, 50%)`, size: 8 });
+                }
             }
         });
         
-        // Zjadanie innych graczy
         for (let otherId in players) {
             if (id === otherId) continue;
             let other = players[otherId];
@@ -84,4 +92,4 @@ setInterval(() => {
     io.emit('update', { players, food });
 }, 25);
 
-http.listen(3000, () => { console.log('BetterBubble.am Live!'); });
+http.listen(3000, () => { console.log('Serwer działa!'); });
