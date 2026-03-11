@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>BetterBubble.am - Granice i Masa</title>
+    <title>BetterBubble.am</title>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background-color: #f2fbff; font-family: Arial, sans-serif; }
         canvas { display: block; }
@@ -49,12 +49,13 @@
 
         let players = {};
         let food = [];
-        let mapSize = 3000; // Wielkość mapy z serwera
+        let mapSize = 3000;
         let myId = null;
         let isPlaying = false;
         let camX = 0, camY = 0;
         let lerpPositions = {};
 
+        // Start gry przez przycisk
         startBtn.addEventListener('click', () => {
             const nick = document.getElementById('nickInput').value || "Gość";
             socket.emit('join', nick);
@@ -64,12 +65,17 @@
 
         socket.on('init', (data) => { 
             myId = data.id; 
-            mapSize = data.mapSize; 
+            if(data.mapSize) mapSize = data.mapSize;
         });
 
         socket.on('update', (data) => {
             players = data.players;
             food = data.food;
+        });
+
+        socket.on('died', () => {
+            isPlaying = false;
+            overlay.style.display = 'block';
         });
 
         window.addEventListener('mousemove', (e) => {
@@ -89,10 +95,12 @@
             ctx.strokeStyle = "#e0e0e0";
             ctx.lineWidth = 1;
             ctx.beginPath();
-            for (let x = (canvas.width / 2 - lerpPositions[myId].x) % size; x < canvas.width; x += size) {
+            const offX = (canvas.width / 2 - lerpPositions[myId].x) % size;
+            const offY = (canvas.height / 2 - lerpPositions[myId].y) % size;
+            for (let x = offX; x < canvas.width; x += size) {
                 ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
             }
-            for (let y = (canvas.height / 2 - lerpPositions[myId].y) % size; y < canvas.height; y += size) {
+            for (let y = offY; y < canvas.height; y += size) {
                 ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
             }
             ctx.stroke();
@@ -114,12 +122,12 @@
                 ctx.save();
                 ctx.translate(-camX, -camY);
 
-                // GRANICE MAPY
+                // Granice mapy
                 ctx.strokeStyle = "#ff4444";
                 ctx.lineWidth = 10;
                 ctx.strokeRect(0, 0, mapSize, mapSize);
 
-                // JEDZENIE I WYRZUCONA MASA
+                // Jedzenie
                 food.forEach(f => {
                     ctx.fillStyle = f.color;
                     ctx.beginPath();
@@ -127,7 +135,7 @@
                     ctx.fill();
                 });
 
-                // GRACZE
+                // Gracze
                 for (let id in players) {
                     const p = players[id];
                     if (!lerpPositions[id]) lerpPositions[id] = { x: p.x, y: p.y };
@@ -138,10 +146,7 @@
                     ctx.beginPath();
                     ctx.arc(lerpPositions[id].x, lerpPositions[id].y, p.size, 0, Math.PI * 2);
                     ctx.fill();
-                    ctx.strokeStyle = "rgba(0,0,0,0.1)";
-                    ctx.lineWidth = 4;
-                    ctx.stroke();
-
+                    
                     ctx.fillStyle = "white";
                     ctx.font = `bold ${Math.max(12, p.size/2.5)}px Arial`;
                     ctx.textAlign = "center";
