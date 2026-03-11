@@ -57,6 +57,6 @@ setInterval(() => {
         });
     }
     io.emit('update', { players, food });
-}, 1000 / 60);
+}, 25);
 
 http.listen(3000, () => { console.log('Gra działa na porcie 3000'); });
