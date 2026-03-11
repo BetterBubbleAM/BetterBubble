@@ -1,69 +1,34 @@
-// SERVER.JS - Professional Cigar Core
-const express = require('express');
-const app = express();
-const http = require('http').Server(app);
-const io = require('socket.io')(http);
+// Konfiguracja serwera BetterBubble.am
+var config = {
+    // [LOGIKA GRY]
+    serverMaxConnections: 64,    // Maksymalna liczba graczy
+    serverPort: 3000,            // Port Twojego serwera
+    
+    // [MAPA I JEDZENIE]
+    borderLeft: 0,
+    borderRight: 6000,           // Większa mapa = więcej zabawy
+    borderTop: 0,
+    borderBottom: 6000,
+    foodMinAmount: 500,          // Ile jedzenia na start
+    foodMaxAmount: 1000,         // Maksymalna ilość kropek
+    foodMass: 1,                 // Masa jednej kropki
+    
+    // [WIRUSY]
+    virusMinAmount: 15,          // Liczba zielonych kolczatek
+    virusStartMass: 100,         // Masa wirusa
+    virusFeedAmount: 7,          // Ile razy trzeba strzelić "W", by wirus pękł
 
-app.use(express.static('public'));
-
-// STAŁE AGAR.IO 1:1
-const CONFIG = {
-    mapLimit: 3000,
-    playerStartMass: 32,
-    playerMaxCells: 16,
-    playerRecombineTime: 30, // sekundy
-    virusMinMass: 100,
-    ejectMass: 16,
-    eatOverlap: 1.1 // musisz być o 10% większy by zjeść
+    // [GRACZ - MECHANIKA 1:1]
+    playerStartMass: 34,         // Startowa wielkość (oryginalne Agar.io)
+    playerMaxMass: 22500,        // Maksymalna masa jednej komórki
+    playerMinMassEject: 35,      // Od kiedy można strzelać "W"
+    playerMinMassSplit: 35,      // Od kiedy można się dzielić "Space"
+    playerMaxCells: 16,          // Limit podziałów (standard to 16)
+    playerRecombineTime: 30,     // Czas łączenia się kulek (w sekundach)
+    playerSpeed: 1.0,            // Mnożnik prędkości (1.0 = standard)
+    
+    // [BOTY]
+    serverBots: 10,              // Dodaj 10 botów, żeby mapa nie była pusta
 };
 
-let gameNodes = { players: {}, food: [], viruses: [], ejected: [] };
-
-// Logika spawnowania wirusów i jedzenia
-function fillMap() {
-    while(gameNodes.food.length < 400) {
-        gameNodes.food.push({
-            id: Math.random(), x: Math.random()*CONFIG.mapLimit, y: Math.random()*CONFIG.mapLimit,
-            color: `hsl(${Math.random()*360},100%,50%)`, size: 10
-        });
-    }
-}
-
-io.on('connection', (socket) => {
-    socket.on('join', (nick) => {
-        players[socket.id] = {
-            id: socket.id, name: nick, color: `hsl(${Math.random()*360},70%,50%)`,
-            cells: [{ x: 1500, y: 1500, size: CONFIG.playerStartMass, bX: 0, bY: 0, birth: Date.now() }],
-            angle: 0, score: CONFIG.playerStartMass
-        };
-    });
-
-    socket.on('move', (angle) => { if(players[socket.id]) players[socket.id].angle = angle; });
-    
-    // Obsługa SPLIT (Space) - identyczna z oryginałem
-    socket.on('split', () => {
-        let p = players[socket.id];
-        if(!p || p.cells.length >= CONFIG.playerMaxCells) return;
-        let added = [];
-        p.cells.forEach(cell => {
-            if(cell.size >= 55) {
-                cell.size /= 1.414;
-                added.push({
-                    x: cell.x, y: cell.y, size: cell.size,
-                    bX: Math.cos(p.angle) * 40, bY: Math.sin(p.angle) * 40, birth: Date.now()
-                });
-            }
-        });
-        p.cells.push(...added);
-    });
-});
-
-// GŁÓWNA PĘTLA FIZYKI (TICK)
-setInterval(() => {
-    fillMap();
-    // Tu odbywa się obliczanie kolizji 1:1, zjadanie wirusów i graczy
-    // Pętle przechodzą przez każdą komórkę i sprawdzają odległość (Math.hypot)
-    io.emit('update', gameNodes);
-}, 40);
-
-http.listen(3000, () => console.log('Cigar Server Online'));
+module.exports = config;
