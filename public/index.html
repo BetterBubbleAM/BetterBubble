@@ -1,32 +1,31 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BetterBubble.am Clone</title>
+    <title>BetterBubble.am</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #111; }
+        body { margin: 0; background: #000; overflow: hidden; }
         canvas { display: block; }
     </style>
 </head>
 <body>
-    <canvas id="canvas"></canvas>
+    <canvas id="ctx"></canvas>
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
-        const canvas = document.getElementById('canvas');
+        const canvas = document.getElementById('ctx');
         const ctx = canvas.getContext('2d');
+        const socket = io();
+
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
-        let mouse = { x: canvas.width/2, y: canvas.height/2 };
+        let mouseX = 0;
+        let mouseY = 0;
 
-        // Sterowanie myszką/dotykiem
-        window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-        window.addEventListener('touchmove', e => { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; });
-
-        setInterval(() => {
-            socket.emit('movement', { x: mouse.x, y: mouse.y });
-        }, 1000/60);
+        window.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+            socket.emit('movement', { x: mouseX, y: mouseY });
+        });
 
         socket.on('state', (data) => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -35,16 +34,16 @@
             data.food.forEach(f => {
                 ctx.fillStyle = f.color;
                 ctx.beginPath();
-                ctx.arc(f.x, f.y, 5, 0, Math.PI*2);
+                ctx.arc(f.x, f.y, 5, 0, Math.PI * 2);
                 ctx.fill();
             });
 
             // Rysuj graczy
-            for (let id in data.players) {
+            for(let id in data.players) {
                 let p = data.players[id];
                 ctx.fillStyle = p.color;
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
                 ctx.fill();
             }
         });
