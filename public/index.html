@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>BetterBubble.am - Ultra Smooth</title>
+    <title>BetterBubble.am - Agar Base</title>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background-color: #f2fbff; font-family: 'Ubuntu', sans-serif; }
         canvas { display: block; }
@@ -41,7 +41,6 @@
 
         let players = {}, food = [], viruses = [], myId = null, isPlaying = false;
         let camX = 0, camY = 0, mapSize = 3000;
-        let lerpPlayers = {}; // Przechowuje wygładzone pozycje
 
         startBtn.addEventListener('click', () => {
             socket.emit('join', document.getElementById('nickInput').value || "Adrian");
@@ -70,6 +69,7 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
+            // System anty-crash
             if (myId && players[myId] && players[myId].cells && players[myId].cells.length > 0) {
                 const me = players[myId];
                 let avgX = 0, avgY = 0;
@@ -83,16 +83,14 @@
                 ctx.save();
                 ctx.translate(-camX, -camY);
 
-                // Siatka tła (tylko tam gdzie widać)
+                // Siatka
                 ctx.strokeStyle = "rgba(0,0,0,0.05)";
                 ctx.beginPath();
                 for(let x=0; x<=mapSize; x+=60) { ctx.moveTo(x,0); ctx.lineTo(x,mapSize); }
                 for(let y=0; y<=mapSize; y+=60) { ctx.moveTo(0,y); ctx.lineTo(mapSize,y); }
                 ctx.stroke();
 
-                ctx.strokeStyle = '#333'; ctx.lineWidth = 10;
-                ctx.strokeRect(0, 0, mapSize, mapSize);
-
+                // Jedzenie i Wirusy
                 food.forEach(f => {
                     ctx.fillStyle = f.color; ctx.beginPath();
                     ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2); ctx.fill();
@@ -104,6 +102,7 @@
                     ctx.strokeStyle = "#2ecc71"; ctx.lineWidth = 4; ctx.stroke();
                 });
 
+                // Gracze
                 for (let id in players) {
                     const p = players[id];
                     if(!p.cells) continue;
