@@ -39,8 +39,9 @@ let smoothPositions = {};
             const me = players[myId];
 
             if (me) {
-                const camX = me.x - canvas.width / 2;
-                const camY = me.y - canvas.height / 2;
+    // Kamera podąża za wygładzoną pozycją "me", a nie surową
+    const camX = smoothPositions[myId].x - canvas.width / 2;
+    const camY = smoothPositions[myId].y - canvas.height / 2;
 
                 ctx.save();
                 ctx.translate(-camX, -camY);
@@ -53,12 +54,23 @@ let smoothPositions = {};
                 });
 
                 for(let id in players) {
-                    let p = players[id];
-                    ctx.fillStyle = p.color;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                    ctx.fill();
-                    
+                    for(let id in players) {
+    let p = players[id];
+
+    // Jeśli gracz pojawił się pierwszy raz, zapisz jego startową pozycję
+    if (!smoothPositions[id]) {
+        smoothPositions[id] = { x: p.x, y: p.y };
+    }
+
+    ctx.fillText(id === myId ? "TY" : "GRACZ", smoothPositions[id].x, smoothPositions[id].y - p.size - 5);
+    smoothPositions[id].x += (p.x - smoothPositions[id].x) * 0.15;
+    smoothPositions[id].y += (p.y - smoothPositions[id].y) * 0.15;
+
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    // Używamy wygładzonej pozycji (smoothPositions) zamiast surowej z serwera (p)
+    ctx.arc(smoothPositions[id].x, smoothPositions[id].y, p.size, 0, Math.PI * 2);
+    ctx.fill();
                     ctx.fillStyle = "white";
                     ctx.textAlign = "center";
                     ctx.fillText(id === myId ? "TY" : "GRACZ", p.x, p.y - p.size - 5);
