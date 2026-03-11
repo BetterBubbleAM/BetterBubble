@@ -2,26 +2,42 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>BetterBubble - Agar Clone</title>
+    <title>BetterBubble</title>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background-color: #f2fbff; }
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #f2fbff; font-family: Arial, sans-serif; }
         canvas { display: block; }
-        /* Styl menu startowego */
         #overlay {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(255, 255, 255, 0.9); padding: 20px; border-radius: 10px;
-            text-align: center; font-family: 'Arial', sans-serif; box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            background: rgba(255, 255, 255, 0.95); padding: 30px; border-radius: 15px;
+            text-align: center; box-shadow: 0 0 30px rgba(0,0,0,0.3); z-index: 10;
         }
-        input { padding: 10px; margin: 10px; border: 1px solid #ccc; border-radius: 5px; }
-        button { padding: 10px 20px; background: #008cff; color: white; border: none; cursor: pointer; border-radius: 5px; }
+        input { padding: 12px; margin: 10px; border: 2px solid #ddd; border-radius: 8px; width: 200px; font-size: 16px; }
+        button { padding: 12px 30px; background: #008cff; color: white; border: none; cursor: pointer; border-radius: 8px; font-weight: bold; font-size: 16px; }
+        button:hover { background: #0076d6; }
+        
+        #leaderboard {
+            position: absolute; top: 15px; right: 15px;
+            background: rgba(0, 0, 0, 0.6); color: white;
+            padding: 15px; border-radius: 10px; min-width: 180px;
+            pointer-events: none; border: 1px solid rgba(255,255,255,0.2);
+        }
+        #leaderboard h3 { margin: 0 0 10px 0; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; }
+        .leader-item { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 14px; }
+        .leader-item.me { color: #ffeb3b; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <h1>BetterBubble</h1>
-        <input type="text" id="nickInput" placeholder="Twój Nick" maxlength="15">
-        <button onclick="startGame()">Graj!</button>
+        <h1>BetterBubble.am</h1>
+        <input type="text" id="nickInput" placeholder="Podaj Nick..." maxlength="15">
+        <br>
+        <button onclick="startGame()">GRAJ TERAZ</button>
+    </div>
+
+    <div id="leaderboard">
+        <h3>Ranking</h3>
+        <div id="leaderList"></div>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -37,14 +53,9 @@
         canvas.height = window.innerHeight;
 
         let players = {};
-let food = [];
-let myId = null;
-let isPlaying = false;
-
-// TO DODAŁEM: Magazyn na wygładzone pozycje
-let lerpPositions = {};
-
-        // Zmienne do płynności (Interpolacja)
+        let food = [];
+        let myId = null;
+        let isPlaying = false;
         let camX = 0, camY = 0;
         let lerpPositions = {};
 
@@ -56,22 +67,25 @@ let lerpPositions = {};
         }
 
         socket.on('init', (id) => { myId = id; });
-
         socket.on('update', (data) => {
             players = data.players;
             food = data.food;
         });
+        socket.on('died', () => {
+            isPlaying = false;
+            overlay.style.display = 'block';
+            alert("Zostałeś zjedzony!");
+        });
 
         window.addEventListener('mousemove', (e) => {
             if (!isPlaying) return;
-            // Wysyłamy kąt ruchu zamiast samej pozycji myszki (bardziej precyzyjne)
             const angle = Math.atan2(e.clientY - canvas.height / 2, e.clientX - canvas.width / 2);
             socket.emit('move', angle);
         });
 
         function drawGrid() {
-            const size = 50;
-            ctx.strokeStyle = "#e0e0e0";
+            const size = 60;
+            ctx.strokeStyle = "#e8e8e8";
             ctx.lineWidth = 1;
             ctx.beginPath();
             for (let x = -camX % size; x < canvas.width; x += size) {
@@ -85,104 +99,27 @@ let lerpPositions = {};
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
             const me = players[myId];
+
             if (me) {
-                // Kamera wyśrodkowana na graczu
-                camX = me.x - canvas.width / 2;
-                camY = me.y - canvas.height / 2;
+                if (!lerpPositions[myId]) lerpPositions[myId] = { x: me.x, y: me.y };
+                lerpPositions[myId].x += (me.x - lerpPositions[myId].x) * 0.15;
+                lerpPositions[myId].y += (me.y - lerpPositions[myId].y) * 0.15;
+
+                camX = lerpPositions[myId].x - canvas.width / 2;
+                camY = lerpPositions[myId].y - canvas.height / 2;
 
                 drawGrid();
-
                 ctx.save();
                 ctx.translate(-camX, -camY);
 
-                // Rysuj jedzenie
                 food.forEach(f => {
                     ctx.fillStyle = f.color;
                     ctx.beginPath();
-                    ctx.arc(f.x, f.y, 10, 0, Math.PI * 2);
+                    ctx.arc(f.x, f.y, 8, 0, Math.PI * 2);
                     ctx.fill();
                 });
 
-                // Rysuj graczy
                 for (let id in players) {
                     const p = players[id];
-                    ctx.fillStyle = p.color;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                    ctx.fill();
-                    
-                    // Nick
-                    ctx.fillStyle = "black";
-                    ctx.font = `bold ${Math.max(12, p.size/3)}px Arial`;
-                    ctx.textAlign = "center";
-                    ctx.fillText(p.name, p.x, p.y + (p.size/10));
-                }
-                ctx.restore();
-            }
-
-            requestAnimationFrame(draw);
-        }
-        function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    const me = players[myId];
-    if (me) {
-        // 1. INICJALIZACJA: Jeśli gracz się pojawił, stwórz mu punkt startowy
-        if (!lerpPositions[myId]) {
-            lerpPositions[myId] = { x: me.x, y: me.y };
-        }
-
-        // 2. PREDYKCJA: Twoja kulka reaguje natychmiast na myszkę (0.2 to siła wygładzania)
-        lerpPositions[myId].x += (me.x - lerpPositions[myId].x) * 0.2;
-        lerpPositions[myId].y += (me.y - lerpPositions[myId].y) * 0.2;
-
-        // 3. KAMERA: Śledzi wygładzoną pozycję
-        camX = lerpPositions[myId].x - canvas.width / 2;
-        camY = lerpPositions[myId].y - canvas.height / 2;
-
-        drawGrid();
-
-        ctx.save();
-        ctx.translate(-camX, -camY);
-
-        // 4. RYSOWANIE JEDZENIA
-        food.forEach(f => {
-            ctx.fillStyle = f.color;
-            ctx.beginPath();
-            ctx.arc(f.x, f.y, 10, 0, Math.PI * 2);
-            ctx.fill();
-        });
-
-        // 5. RYSOWANIE GRACZY Z LERPEM
-        for (let id in players) {
-            const p = players[id];
-            
-            if (!lerpPositions[id]) {
-                lerpPositions[id] = { x: p.x, y: p.y };
-            }
-
-            // Wygładzanie ruchu innych graczy (0.15 - bardzo płynnie)
-            lerpPositions[id].x += (p.x - lerpPositions[id].x) * 0.15;
-            lerpPositions[id].y += (p.y - lerpPositions[id].y) * 0.15;
-
-            ctx.fillStyle = p.color;
-            ctx.beginPath();
-            ctx.arc(lerpPositions[id].x, lerpPositions[id].y, p.size, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Nick gracza
-            ctx.fillStyle = "black";
-            ctx.font = `bold ${Math.max(12, p.size/3)}px Arial`;
-            ctx.textAlign = "center";
-            ctx.fillText(p.name, lerpPositions[id].x, lerpPositions[id].y + (p.size/5));
-        }
-        ctx.restore();
-    }
-
-    requestAnimationFrame(draw);
-}
-    </script>
-</body>
-</html>
+                    if (!lerpPositions[id]) lerpPositions[id] = { x
