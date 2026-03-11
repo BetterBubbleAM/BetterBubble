@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BetterBubble - Gra</title>
+    <style>
+        body { margin: 0; background: #111; overflow: hidden; color: white; font-family: sans-serif; }
+        canvas { display: block; }
+        #overlay { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div id="overlay">
+        <b>BetterBubble</b><br>
+        Graczy online: <span id="count">0</span>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        socket.on('connect', () => {
+            console.log("Połączono z serwerem!");
+        });
+
+        // Tu będzie rysowanie kulek w czasie rzeczywistym
+    </script>
+</body>
+</html>
