@@ -1,89 +1,92 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>BetterBubble.am</title>
+    <title>Agar.io Private Server</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #f2fbff; font-family: sans-serif; }
-        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-        #menu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 10px; text-align: center; pointer-events: auto; box-shadow: 0 0 20px rgba(0,0,0,0.2); }
-        #leaderboard { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.5); color: white; padding: 15px; border-radius: 5px; min-width: 150px; }
-        input { padding: 10px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 10px; }
-        button { padding: 10px 20px; background: #008cff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        body { margin: 0; background-color: #f2fbff; overflow: hidden; font-family: 'Ubuntu', sans-serif; }
+        #canvas { display: block; }
+        #main-menu {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: #fff; padding: 40px; border-radius: 10px; box-shadow: 0 0 40px rgba(0,0,0,0.2);
+            width: 350px; text-align: center;
+        }
+        input { width: 90%; padding: 12px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 5px; font-size: 18px; }
+        button { width: 100%; padding: 12px; background: #008cff; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 20px; }
+        #lb { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.4); color: white; padding: 15px; border-radius: 5px; width: 180px; pointer-events: none; }
     </style>
 </head>
 <body>
-    <div id="ui">
-        <div id="menu">
-            <h1>BetterBubble.am</h1>
-            <input type="text" id="nick" placeholder="Twoje imię" maxlength="15">
-            <br>
-            <button id="playBtn">GRAJ</button>
-        </div>
-        <div id="leaderboard">
-            <strong>Ranking:</strong>
-            <div id="list"></div>
-        </div>
+    <div id="main-menu">
+        <h1 style="margin-top:0; color:#555;">Agar.io</h1>
+        <input type="text" id="nick" placeholder="Nick" maxlength="15">
+        <button id="play">Graj</button>
     </div>
-    <canvas id="cvs"></canvas>
+    <div id="lb"><strong>Leaderboard</strong><div id="list"></div></div>
+    <canvas id="canvas"></canvas>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        const canvas = document.getElementById('cvs');
+        const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        let players = {}, food = [], myId = null, camX = 0, camY = 0;
 
-        let players = {}, food = [], viruses = [], myId = null;
-        let camX = 0, camY = 0;
-
-        document.getElementById('playBtn').onclick = () => {
-            const nick = document.getElementById('nick').value;
-            socket.emit('join', nick || "Adrian");
-            document.getElementById('menu').style.display = 'none';
+        document.getElementById('play').onclick = () => {
+            socket.emit('join', document.getElementById('nick').value || "Adrian");
+            document.getElementById('main-menu').style.display = 'none';
         };
 
         socket.on('init', id => myId = id);
-        socket.on('update', data => { players = data.players; food = data.food; viruses = data.viruses; });
+        socket.on('update', d => { players = d.players; food = d.food; });
 
         window.onmousemove = e => {
-            const angle = Math.atan2(e.clientY - canvas.height/2, e.clientX - canvas.width/2);
+            const angle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2);
             socket.emit('move', angle);
         };
 
         function draw() {
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Zabezpieczenie przed błędem z Twojego screena
-            if (myId && players[myId] && players[myId].cells) {
-                const me = players[myId];
-                camX = me.cells[0].x - canvas.width/2;
-                camY = me.cells[0].y - canvas.height/2;
+
+            // Zabezpieczenie przed białym ekranem
+            if(myId && players[myId] && players[myId].cells && players[myId].cells.length > 0) {
+                const me = players[myId].cells[0];
+                camX += (me.x - canvas.width/2 - camX) * 0.1;
+                camY += (me.y - canvas.height/2 - camY) * 0.1;
 
                 ctx.save();
                 ctx.translate(-camX, -camY);
 
-                // Jedzenie
+                // Siatka Agar.io
+                ctx.strokeStyle = "rgba(0,0,0,0.05)";
+                for(let x=0; x<5000; x+=50) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,5000); ctx.stroke(); }
+                for(let y=0; y<5000; y+=50) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(5000,y); ctx.stroke(); }
+
                 food.forEach(f => {
                     ctx.fillStyle = f.color; ctx.beginPath();
-                    ctx.arc(f.x, f.y, f.size, 0, Math.PI*2); ctx.fill();
+                    ctx.arc(f.x, f.y, 10, 0, Math.PI*2); ctx.fill();
                 });
 
-                // Gracze
                 for(let id in players) {
                     const p = players[id];
+                    if(!p.cells) continue;
                     p.cells.forEach(c => {
+                        const r = Math.sqrt(c.mass * 100);
+                        // Rysowanie z obramowaniem
                         ctx.fillStyle = p.color; ctx.beginPath();
-                        ctx.arc(c.x, c.y, c.size, 0, Math.PI*2); ctx.fill();
-                        ctx.fillStyle = "white"; ctx.textAlign = "center";
-                        ctx.fillText(p.name, c.x, c.y);
+                        ctx.arc(c.x, c.y, r, 0, Math.PI*2); ctx.fill();
+                        ctx.strokeStyle = "rgba(0,0,0,0.1)"; ctx.lineWidth = r*0.05; ctx.stroke();
+                        
+                        // Napisy
+                        ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = `bold ${r/2.5}px Ubuntu`;
+                        ctx.fillText(p.name, c.x, c.y + r/8);
                     });
                 }
                 ctx.restore();
-
+                
                 // Ranking
-                const sorted = Object.values(players).sort((a,b) => b.score - a.score).slice(0, 5);
-                document.getElementById('list').innerHTML = sorted.map(p => `<div>${p.name}: ${p.score}</div>`).join('');
+                const top = Object.values(players).sort((a,b) => (b.cells[0]?.mass || 0) - (a.cells[0]?.mass || 0)).slice(0,10);
+                document.getElementById('list').innerHTML = top.map((p,i) => `<div>${i+1}. ${p.name}</div>`).join('');
             }
             requestAnimationFrame(draw);
         }
