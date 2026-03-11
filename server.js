@@ -1,78 +1,62 @@
 const express = require('express');
-const http = require('http');
-const socketIo = require('socket.io');
-
 const app = express();
-const server = http.createServer(app);
-const io = socketIo(server);
+const http = require('http').Server(app);
+const io = require('socket.io')(http);
 
 app.use(express.static('public'));
 
 let players = {};
 let food = [];
-const MAP_SIZE = 2000;
+const MAP_SIZE = 3000;
 
-// Tworzenie jedzenia na start
-for (let i = 0; i < 150; i++) {
-    food.push({
-        id: i,
-        x: Math.random() * MAP_SIZE,
-        y: Math.random() * MAP_SIZE,
-        color: `hsl(${Math.random() * 360}, 100%, 50%)`
-    });
+// Tworzenie jedzenia
+for(let i=0; i<300; i++) {
+    food.push({ x: Math.random()*MAP_SIZE, y: Math.random()*MAP_SIZE, color: `hsl(${Math.random()*360}, 100%, 50%)` });
 }
 
 io.on('connection', (socket) => {
-    console.log('Nowy gracz:', socket.id);
-    
-    // Inicjalizacja gracza
-    players[socket.id] = {
-        x: Math.random() * MAP_SIZE,
-        y: Math.random() * MAP_SIZE,
-        size: 20,
-        color: `hsl(${Math.random() * 360}, 100%, 50%)`,
-        name: "Gość"
-    };
-
-    socket.on('movement', (data) => {
-        const player = players[socket.id];
-        if (player) {
-            // Obliczanie kierunku ruchu w stronę myszki
-            const dx = data.x - player.x;
-            const dy = data.y - player.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            
-            if (dist > 5) {
-                const speed = 2 + (500 / player.size); // Im większy, tym wolniejszy
-                player.x += (dx / dist) * speed;
-                player.y += (dy / dist) * speed;
-            }
-
-            // Kolizja z jedzeniem
-            food.forEach((f, index) => {
-                const fdx = player.x - f.x;
-                const fdy = player.y - f.y;
-                if (Math.sqrt(fdx * fdx + fdy * fdy) < player.size) {
-                    player.size += 0.5;
-                    food[index] = {
-                        id: f.id,
-                        x: Math.random() * MAP_SIZE,
-                        y: Math.random() * MAP_SIZE,
-                        color: `hsl(${Math.random() * 360}, 100%, 50%)`
-                    };
-                }
-            });
-        }
+    socket.on('join', (nick) => {
+        players[socket.id] = {
+            x: Math.random() * MAP_SIZE,
+            y: Math.random() * MAP_SIZE,
+            size: 30,
+            color: `hsl(${Math.random()*360}, 80%, 60%)`,
+            name: nick,
+            angle: 0
+        };
+        socket.emit('init', socket.id);
     });
 
-    socket.on('disconnect', () => {
-        delete players[socket.id];
+    socket.on('move', (angle) => {
+        if(players[socket.id]) players[socket.id].angle = angle;
     });
+
+    socket.on('disconnect', () => { delete players[socket.id]; });
 });
 
-// Wysyłanie danych do wszystkich 30 razy na sekundę (Tickrate)
+// Pętla logiki serwera (60 razy na sekundę)
 setInterval(() => {
-    io.emit('gameUpdate', { players, food });
-}, 1000 / 30);
+    for (let id in players) {
+        let p = players[id];
+        // Prędkość zależna od wielkości (im większy, tym wolniejszy)
+        let speed = 4 * (30 / p.size) + 1;
+        p.x += Math.cos(p.angle) * speed;
+        p.y += Math.sin(p.angle) * speed;
 
-server.listen(3000, () => console.log('Serwer działa na porcie 3000'));
+        // Granice mapy
+        p.x = Math.max(0, Math.min(MAP_SIZE, p.x));
+        p.y = Math.max(0, Math.min(MAP_SIZE, p.y));
+
+        // Zjadanie jedzenia
+        food.forEach((f, index) => {
+            let dist = Math.hypot(p.x - f.x, p.y - f.y);
+            if (dist < p.size) {
+                p.size += 0.5; // Rośnięcie
+                food[index] = { x: Math.random()*MAP_SIZE, y: Math.random()*MAP_SIZE, color: `hsl(${Math.random()*360}, 100%, 50%)` };
+            }
+        });
+    }
+    io.emit('update', { players, food });
+}, 1000 / 60);
+
+http.listen(3000, () => { console.log('Gra działa na porcie 3000'); });
