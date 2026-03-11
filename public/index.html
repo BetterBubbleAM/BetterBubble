@@ -99,3 +99,52 @@
 
             if (me) {
                 if (!lerpPositions[myId]) lerpPositions[myId] = { x: me.x, y: me.y };
+                lerpPositions[myId].x += (me.x - lerpPositions[myId].x) * 0.2;
+                lerpPositions[myId].y += (me.y - lerpPositions[myId].y) * 0.2;
+
+                camX = lerpPositions[myId].x - canvas.width / 2;
+                camY = lerpPositions[myId].y - canvas.height / 2;
+
+                drawGrid();
+                ctx.save();
+                ctx.translate(-camX, -camY);
+
+                food.forEach(f => {
+                    ctx.fillStyle = f.color;
+                    ctx.beginPath();
+                    ctx.arc(f.x, f.y, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+
+                for (let id in players) {
+                    const p = players[id];
+                    if (!lerpPositions[id]) lerpPositions[id] = { x: p.x, y: p.y };
+                    lerpPositions[id].x += (p.x - lerpPositions[id].x) * 0.2;
+                    lerpPositions[id].y += (p.y - lerpPositions[id].y) * 0.2;
+
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(lerpPositions[id].x, lerpPositions[id].y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = "rgba(0,0,0,0.1)";
+                    ctx.lineWidth = 4;
+                    ctx.stroke();
+
+                    ctx.fillStyle = "white";
+                    ctx.font = `bold ${Math.max(14, p.size/2.5)}px Arial`;
+                    ctx.textAlign = "center";
+                    ctx.fillText(p.name, lerpPositions[id].x, lerpPositions[id].y + 5);
+                }
+                ctx.restore();
+
+                const sorted = Object.values(players).sort((a, b) => b.size - a.size).slice(0, 10);
+                document.getElementById('leaderList').innerHTML = sorted.map((p, i) => 
+                    `<div class="leader-item"><span>${i+1}. ${p.name}</span><span>${Math.floor(p.size)}</span></div>`
+                ).join('');
+            }
+            requestAnimationFrame(draw);
+        }
+        draw();
+    </script>
+</body>
+</html>
