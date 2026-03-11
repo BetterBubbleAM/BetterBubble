@@ -2,37 +2,35 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>BetterBubble</title>
+    <title>BetterBubble.am - Naprawiony</title>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background-color: #f2fbff; font-family: 'Ubuntu', sans-serif; }
         canvas { display: block; }
         #overlay {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(255,255,255,0.9); padding: 40px; border-radius: 20px; text-align: center;
+            background: rgba(255,255,255,0.95); padding: 40px; border-radius: 20px; text-align: center;
             box-shadow: 0 0 30px rgba(0,0,0,0.1); z-index: 100;
         }
         input { padding: 15px; margin: 15px; border: 2px solid #ddd; border-radius: 10px; width: 250px; font-size: 18px; outline: none; }
-        button { padding: 15px 30px; background: #008cff; color: white; border: none; cursor: pointer; border-radius: 10px; font-weight: bold; font-size: 18px; transition: 0.2s; }
-        button:hover { background: #0070cc; transform: scale(1.05); }
+        button { padding: 15px 30px; background: #008cff; color: white; border: none; cursor: pointer; border-radius: 10px; font-weight: bold; font-size: 18px; }
         #leaderboard {
             position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.5);
             color: white; padding: 20px; border-radius: 10px; min-width: 200px; pointer-events: none;
         }
-        .leader-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 16px; font-weight: bold; }
+        .leader-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 16px; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <h1 style="color: #333; margin-bottom: 5px;">BetterBubble.am</h1>
-        <p style="color: #777; margin-top: 0;">Inspirowane Agar.io</p>
-        <input type="text" id="nickInput" placeholder="Podaj nick..." maxlength="15">
+        <h1>BetterBubble.am</h1>
+        <input type="text" id="nickInput" placeholder="Twój Nick" maxlength="15">
         <br>
         <button id="startBtn">GRAJ TERAZ</button>
     </div>
 
     <div id="leaderboard">
-        <h3 style="margin-top: 0; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px;">Ranking</h3>
+        <h3>Ranking</h3>
         <div id="leaderList"></div>
     </div>
 
@@ -59,11 +57,15 @@
             isPlaying = true;
         });
 
-        socket.on('init', (data) => { myId = data.id; mapSize = data.mapSize; });
+        socket.on('init', (data) => { 
+            myId = data.id; 
+            mapSize = data.mapSize; 
+        });
+
         socket.on('update', (data) => { 
-            players = data.players; 
-            food = data.food; 
-            viruses = data.viruses;
+            players = data.players || {}; 
+            food = data.food || []; 
+            viruses = data.viruses || [];
         });
 
         window.addEventListener('mousemove', (e) => {
@@ -78,25 +80,13 @@
             if (e.code === 'KeyW') socket.emit('eject');
         });
 
-        function drawGrid() {
-            const size = 60;
-            ctx.strokeStyle = "rgba(0,0,0,0.05)";
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            for (let x = -camX % size; x < canvas.width; x += size) {
-                ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
-            }
-            for (let y = -camY % size; y < canvas.height; y += size) {
-                ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
-            }
-            ctx.stroke();
-        }
-
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const me = players[myId];
-
-            if (me && me.cells.length > 0) {
+            
+            // BEZPIECZNIK: Sprawdzamy czy myId istnieje i czy taki gracz jest w danych
+            if (myId && players[myId] && players[myId].cells) {
+                const me = players[myId];
+                
                 let avgX = 0, avgY = 0;
                 me.cells.forEach(c => { avgX += c.x; avgY += c.y; });
                 avgX /= me.cells.length;
@@ -105,13 +95,14 @@
                 camX += (avgX - canvas.width / 2 - camX) * 0.1;
                 camY += (avgY - canvas.height / 2 - camY) * 0.1;
 
-                drawGrid();
                 ctx.save();
                 ctx.translate(-camX, -camY);
 
-                // Granice mapy
+                // Tło i granice
+                ctx.fillStyle = "#fff";
+                ctx.fillRect(0,0, mapSize, mapSize);
                 ctx.strokeStyle = '#333';
-                ctx.lineWidth = 15;
+                ctx.lineWidth = 10;
                 ctx.strokeRect(0, 0, mapSize, mapSize);
 
                 // Jedzenie
@@ -128,41 +119,34 @@
                     ctx.beginPath();
                     for(let i=0; i<16; i++){
                         let angle = (i/16) * Math.PI * 2;
-                        let r = (i%2 === 0) ? v.size : v.size * 1.2;
+                        let r = (i%2 === 0) ? v.size : v.size * 1.15;
                         ctx.lineTo(v.x + Math.cos(angle)*r, v.y + Math.sin(angle)*r);
                     }
                     ctx.closePath();
                     ctx.fill();
-                    ctx.strokeStyle = "#22cc22";
-                    ctx.lineWidth = 4;
-                    ctx.stroke();
                 });
 
                 // Gracze
                 for (let id in players) {
                     const p = players[id];
+                    if (!p.cells) continue;
                     p.cells.forEach(cell => {
                         ctx.fillStyle = p.color;
                         ctx.beginPath();
                         ctx.arc(cell.x, cell.y, cell.size, 0, Math.PI * 2);
                         ctx.fill();
-                        ctx.strokeStyle = "rgba(0,0,0,0.1)";
-                        ctx.lineWidth = 4;
-                        ctx.stroke();
-
+                        
                         ctx.fillStyle = "white";
-                        ctx.font = `bold ${cell.size/2.5}px Arial`;
+                        ctx.font = `bold ${cell.size/3}px Arial`;
                         ctx.textAlign = "center";
                         ctx.fillText(p.name, cell.x, cell.y);
-                        ctx.font = `${cell.size/4}px Arial`;
-                        ctx.fillText(Math.floor(cell.size), cell.x, cell.y + cell.size/2.5);
                     });
                 }
                 ctx.restore();
 
-                const sorted = Object.values(players).sort((a, b) => b.score - a.score).slice(0, 10);
+                const sorted = Object.values(players).sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 10);
                 document.getElementById('leaderList').innerHTML = sorted.map((p, i) => 
-                    `<div class="leader-item"><span>${i+1}. ${p.name}</span><span>${Math.floor(p.score)}</span></div>`
+                    `<div class="leader-item"><span>${i+1}. ${p.name}</span><span>${Math.floor(p.score || 0)}</span></div>`
                 ).join('');
             }
             requestAnimationFrame(draw);
