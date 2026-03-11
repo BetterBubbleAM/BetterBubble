@@ -29,8 +29,9 @@ io.on('connection', (socket) => {
     socket.on('movement', (data) => {
         if(players[socket.id]) {
             // Płynny ruch w stronę myszki
-            players[socket.id].x += (data.x - windowWidth/2) * 0.1; // To dopracujemy w kliencie
-            players[socket.id].x = data.x; 
+            socket.on('movement', (data) => {
+        if(players[socket.id]) {
+            players[socket.id].x = data.x;
             players[socket.id].y = data.y;
         }
     });
