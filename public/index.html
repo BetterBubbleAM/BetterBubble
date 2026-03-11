@@ -3,62 +3,71 @@
 <head>
     <title>BetterBubble.am</title>
     <style>
-        body { margin: 0; background: #111; overflow: hidden; }
+        body { margin: 0; background: #000; overflow: hidden; }
         canvas { display: block; }
     </style>
 </head>
 <body>
-    <canvas id="canvas"></canvas>
+    <canvas id="ctx"></canvas>
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
-        const canvas = document.getElementById('canvas');
+        const canvas = document.getElementById('ctx');
         const ctx = canvas.getContext('2d');
+        const socket = io();
+
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
         let myId = null;
+        let mouseX = 0;
+        let mouseY = 0;
+
         socket.on('connect', () => { myId = socket.id; });
 
         window.addEventListener('mousemove', (e) => {
-            socket.emit('movement', { x: e.clientX, y: e.clientY });
+            // Przeliczamy pozycję myszki względem świata
+            mouseX = e.clientX + (window.cameraX || 0);
+            mouseY = e.clientY + (window.cameraY || 0);
+            socket.emit('movement', { x: mouseX, y: mouseY });
         });
 
         socket.on('state', (data) => {
+            const me = data.players[myId];
+            if (!me) return;
+
+            // Kamera centruje się na Tobie
+            const camX = me.x - canvas.width / 2;
+            const camY = me.y - canvas.height / 2;
+            window.cameraX = camX;
+            window.cameraY = camY;
+
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            const me = data.players[myId];
-            
-            // Jeśli serwer Cię widzi, centrujemy świat na Tobie
-            if (me) {
-                const offsetX = canvas.width / 2 - me.x;
-                const offsetY = canvas.height / 2 - me.y;
+            ctx.save();
+            ctx.translate(-camX, -camY);
 
-                ctx.save();
-                ctx.translate(offsetX, offsetY);
+            // Rysowanie kropek
+            data.food.forEach(f => {
+                ctx.fillStyle = f.color;
+                ctx.beginPath();
+                ctx.arc(f.x, f.y, 8, 0, Math.PI * 2);
+                ctx.fill();
+            });
 
-                // Rysuj jedzenie
-                data.food.forEach(f => {
-                    ctx.fillStyle = f.color;
-                    ctx.beginPath();
-                    ctx.arc(f.x, f.y, 8, 0, Math.PI * 2);
-                    ctx.fill();
-                });
-
-                // Rysuj graczy
-                for (let id in data.players) {
-                    const p = data.players[id];
-                    ctx.fillStyle = p.color;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                    ctx.fill();
-                    
-                    ctx.fillStyle = 'white';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(id === myId ? "TY" : "Gracz", p.x, p.y - p.size - 5);
-                }
-                ctx.restore();
+            // Rysowanie graczy
+            for(let id in data.players) {
+                let p = data.players[id];
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = "white";
+                ctx.textAlign = "center";
+                ctx.font = "14px Arial";
+                ctx.fillText(id === myId ? "TY" : "GRACZ", p.x, p.y - p.size - 5);
             }
+            ctx.restore();
         });
     </script>
 </body>
