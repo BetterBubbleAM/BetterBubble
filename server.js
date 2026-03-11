@@ -1,34 +1,64 @@
-// Konfiguracja serwera BetterBubble.am
-var config = {
-    // [LOGIKA GRY]
-    serverMaxConnections: 64,    // Maksymalna liczba graczy
-    serverPort: 3000,            // Port Twojego serwera
-    
-    // [MAPA I JEDZENIE]
-    borderLeft: 0,
-    borderRight: 6000,           // Większa mapa = więcej zabawy
-    borderTop: 0,
-    borderBottom: 6000,
-    foodMinAmount: 500,          // Ile jedzenia na start
-    foodMaxAmount: 1000,         // Maksymalna ilość kropek
-    foodMass: 1,                 // Masa jednej kropki
-    
-    // [WIRUSY]
-    virusMinAmount: 15,          // Liczba zielonych kolczatek
-    virusStartMass: 100,         // Masa wirusa
-    virusFeedAmount: 7,          // Ile razy trzeba strzelić "W", by wirus pękł
+const express = require('express');
+const app = express();
+const http = require('http').Server(app);
+const io = require('socket.io')(http);
 
-    // [GRACZ - MECHANIKA 1:1]
-    playerStartMass: 34,         // Startowa wielkość (oryginalne Agar.io)
-    playerMaxMass: 22500,        // Maksymalna masa jednej komórki
-    playerMinMassEject: 35,      // Od kiedy można strzelać "W"
-    playerMinMassSplit: 35,      // Od kiedy można się dzielić "Space"
-    playerMaxCells: 16,          // Limit podziałów (standard to 16)
-    playerRecombineTime: 30,     // Czas łączenia się kulek (w sekundach)
-    playerSpeed: 1.0,            // Mnożnik prędkości (1.0 = standard)
-    
-    // [BOTY]
-    serverBots: 10,              // Dodaj 10 botów, żeby mapa nie była pusta
-};
+app.use(express.static('public'));
 
-module.exports = config;
+let players = {};
+let food = [];
+let viruses = [];
+const MAP_SIZE = 3000;
+
+// Generowanie jedzenia i wirusów na start
+function initWorld() {
+    for(let i=0; i<300; i++) food.push({x: Math.random()*MAP_SIZE, y: Math.random()*MAP_SIZE, color: `hsl(${Math.random()*360},100%,50%)`, size: 8});
+    for(let i=0; i<10; i++) viruses.push({x: Math.random()*MAP_SIZE, y: Math.random()*MAP_SIZE, size: 60});
+}
+initWorld();
+
+io.on('connection', (socket) => {
+    socket.on('join', (nick) => {
+        players[socket.id] = {
+            name: nick,
+            color: `hsl(${Math.random()*360},80%,50%)`,
+            cells: [{ x: 1500, y: 1500, size: 32, bX: 0, bY: 0, t: Date.now() }],
+            angle: 0,
+            score: 32
+        };
+        socket.emit('init', socket.id);
+    });
+
+    socket.on('move', (angle) => { if(players[socket.id]) players[socket.id].angle = angle; });
+
+    socket.on('disconnect', () => { delete players[socket.id]; });
+});
+
+// Pętla fizyki 1:1
+setInterval(() => {
+    for (let id in players) {
+        let p = players[id];
+        p.cells.forEach((c) => {
+            let speed = 4 * (30/c.size) + 1;
+            c.x += Math.cos(p.angle) * speed;
+            c.y += Math.sin(p.angle) * speed;
+            
+            // Granice mapy
+            c.x = Math.max(c.size, Math.min(MAP_SIZE - c.size, c.x));
+            c.y = Math.max(c.size, Math.min(MAP_SIZE - c.size, c.y));
+
+            // Zjadanie kropek
+            food.forEach((f, i) => {
+                if(Math.hypot(c.x-f.x, c.y-f.y) < c.size) {
+                    c.size += 0.5;
+                    food.splice(i, 1);
+                    food.push({x: Math.random()*MAP_SIZE, y: Math.random()*MAP_SIZE, color: `hsl(${Math.random()*360},100%,50%)`, size: 8});
+                }
+            });
+        });
+        p.score = p.cells.reduce((sum, cell) => sum + Math.floor(cell.size), 0);
+    }
+    io.emit('update', { players, food, viruses });
+}, 35);
+
+http.listen(process.env.PORT || 3000);
