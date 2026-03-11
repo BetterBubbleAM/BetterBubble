@@ -31,43 +31,75 @@
         window.addEventListener('mousemove', (e) => {
             const camX = players[myId] ? players[myId].x - canvas.width / 2 : 0;
             const camY = players[myId] ? players[myId].y - canvas.height / 2 : 0;
-            socket.emit('movement', { x: e.clientX + camX, y: e.clientY + camY });
-        });
+            socket.emit('movement', { x: e.clientX + camSmoothX, y: e.clientY + camSmoothY });
+});
+
+// Zmienne do płynnego ruchu - dopisane tutaj, aby gra ich nie "zapominała"
 let smoothPositions = {};
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const me = players[myId];
+let camSmoothX = 0;
+let camSmoothY = 0;
 
-            if (me) {
-    // Kamera podąża za wygładzoną pozycją "me", a nie surową
-    const camX = smoothPositions[myId].x - canvas.width / 2;
-    const camY = smoothPositions[myId].y - canvas.height / 2;
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const me = players[myId];
 
-                ctx.save();
-                ctx.translate(-camX, -camY);
+    if (me) {
+        // Jeśli Twoja kulka pojawiła się pierwszy raz, ustaw start kamery
+        if (!smoothPositions[myId]) {
+            smoothPositions[myId] = { x: me.x, y: me.y };
+            camSmoothX = me.x - canvas.width / 2;
+            camSmoothY = me.y - canvas.height / 2;
+        }
 
-                food.forEach(f => {
-                    ctx.fillStyle = f.color;
-                    ctx.beginPath();
-                    ctx.arc(f.x, f.y, 8, 0, Math.PI * 2);
-                    ctx.fill();
-                });
+        // 1. Obliczamy cel kamery (środek ekranu na Tobie)
+        const targetCamX = smoothPositions[myId].x - canvas.width / 2;
+        const targetCamY = smoothPositions[myId].y - canvas.height / 2;
 
-                for(let id in players) {
-                    for(let id in players) {
-    smoothPositions[id].x += (p.x - smoothPositions[id].x) * 0.08;
-smoothPositions[id].y += (p.y - smoothPositions[id].y) * 0.08;
-        smoothPositions[id] = { x: p.x, y: p.y };
+        // 2. Wygładzamy ruch kamery (0.05 - bardzo płynny, "powolny" ruch)
+        camSmoothX += (targetCamX - camSmoothX) * 0.05;
+        camSmoothY += (targetCamY - camSmoothY) * 0.05;
+
+        ctx.save();
+        ctx.translate(-camSmoothX, -camSmoothY);
+
+        // Rysowanie jedzenia
+        food.forEach(f => {
+            ctx.fillStyle = f.color;
+            ctx.beginPath();
+            ctx.arc(f.x, f.y, 8, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Rysowanie graczy z wygładzaniem
+        for (let id in players) {
+            let p = players[id];
+
+            // Jeśli nowy gracz wejdzie na serwer, stwórz mu punkt startowy
+            if (!smoothPositions[id]) {
+                smoothPositions[id] = { x: p.x, y: p.y };
+            }
+
+            // SPOWOLNIENIE KULKI: 0.08 sprawia, że kulka płynie, a nie skacze
+            smoothPositions[id].x += (p.x - smoothPositions[id].x) * 0.08;
+            smoothPositions[id].y += (p.y - smoothPositions[id].y) * 0.08;
+
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(smoothPositions[id].x, smoothPositions[id].y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Napisy nad kulkami (również wygładzone)
+            ctx.fillStyle = "white";
+            ctx.textAlign = "center";
+            ctx.fillText(id === myId ? "TY" : "GRACZ", smoothPositions[id].x, smoothPositions[id].y - p.size - 5);
+        }
+
+        ctx.restore();
     }
+    requestAnimationFrame(draw);
+}
 
-    ctx.fillText(id === myId ? "TY" : "GRACZ", smoothPositions[id].x, smoothPositions[id].y - p.size - 5);
-    smoothPositions[id].x += (p.x - smoothPositions[id].x) * 0.15;
-    smoothPositions[id].y += (p.y - smoothPositions[id].y) * 0.15;
-
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    // Używamy wygładzonej pozycji (smoothPositions) zamiast surowej z serwera (p)
-    ctx.arc(smoothPositions[id].x, smoothPositions[id].y, p.size, 0, Math.PI * 2);
+draw();
     ctx.fill();
                     ctx.fillStyle = "white";
                     ctx.textAlign = "center";
