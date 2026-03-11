@@ -2,38 +2,31 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>BetterBubble.am - Naprawiony</title>
+    <title>BetterBubble.am - Ultra Smooth</title>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background-color: #f2fbff; font-family: 'Ubuntu', sans-serif; }
         canvas { display: block; }
         #overlay {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(255,255,255,0.95); padding: 40px; border-radius: 20px; text-align: center;
-            box-shadow: 0 0 30px rgba(0,0,0,0.1); z-index: 100;
+            background: rgba(255,255,255,0.9); padding: 30px; border-radius: 15px; text-align: center;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2); z-index: 100;
         }
-        input { padding: 15px; margin: 15px; border: 2px solid #ddd; border-radius: 10px; width: 250px; font-size: 18px; outline: none; }
-        button { padding: 15px 30px; background: #008cff; color: white; border: none; cursor: pointer; border-radius: 10px; font-weight: bold; font-size: 18px; }
         #leaderboard {
-            position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.5);
-            color: white; padding: 20px; border-radius: 10px; min-width: 200px; pointer-events: none;
+            position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.6);
+            color: white; padding: 15px; border-radius: 8px; min-width: 180px; pointer-events: none;
         }
-        .leader-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 16px; }
+        input { padding: 12px; margin: 10px; border: 1px solid #ccc; border-radius: 8px; width: 200px; }
+        button { padding: 12px 25px; background: #008cff; color: white; border: none; cursor: pointer; border-radius: 8px; font-weight: bold; }
     </style>
 </head>
 <body>
-
     <div id="overlay">
         <h1>BetterBubble.am</h1>
-        <input type="text" id="nickInput" placeholder="Twój Nick" maxlength="15">
+        <input type="text" id="nickInput" placeholder="Nick" maxlength="15">
         <br>
-        <button id="startBtn">GRAJ TERAZ</button>
+        <button id="startBtn">START</button>
     </div>
-
-    <div id="leaderboard">
-        <h3>Ranking</h3>
-        <div id="leaderList"></div>
-    </div>
-
+    <div id="leaderboard"><h3>Ranking</h3><div id="leaderList"></div></div>
     <canvas id="gameCanvas"></canvas>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -41,7 +34,6 @@
         const socket = io();
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const overlay = document.getElementById('overlay');
         const startBtn = document.getElementById('startBtn');
 
         canvas.width = window.innerWidth;
@@ -49,23 +41,19 @@
 
         let players = {}, food = [], viruses = [], myId = null, isPlaying = false;
         let camX = 0, camY = 0, mapSize = 3000;
+        let lerpPlayers = {}; // Przechowuje wygładzone pozycje
 
         startBtn.addEventListener('click', () => {
-            const nick = document.getElementById('nickInput').value || "Adrian";
-            socket.emit('join', nick);
-            overlay.style.display = 'none';
+            socket.emit('join', document.getElementById('nickInput').value || "Adrian");
+            document.getElementById('overlay').style.display = 'none';
             isPlaying = true;
         });
 
-        socket.on('init', (data) => { 
-            myId = data.id; 
-            mapSize = data.mapSize; 
-        });
-
+        socket.on('init', (data) => { myId = data.id; mapSize = data.mapSize; });
         socket.on('update', (data) => { 
-            players = data.players || {}; 
-            food = data.food || []; 
-            viruses = data.viruses || [];
+            players = data.players; 
+            food = data.food; 
+            viruses = data.viruses;
         });
 
         window.addEventListener('mousemove', (e) => {
@@ -75,7 +63,6 @@
         });
 
         window.addEventListener('keydown', (e) => {
-            if (!isPlaying) return;
             if (e.code === 'Space') socket.emit('split');
             if (e.code === 'KeyW') socket.emit('eject');
         });
@@ -83,10 +70,8 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // BEZPIECZNIK: Sprawdzamy czy myId istnieje i czy taki gracz jest w danych
-            if (myId && players[myId] && players[myId].cells) {
+            if (myId && players[myId] && players[myId].cells && players[myId].cells.length > 0) {
                 const me = players[myId];
-                
                 let avgX = 0, avgY = 0;
                 me.cells.forEach(c => { avgX += c.x; avgY += c.y; });
                 avgX /= me.cells.length;
@@ -98,55 +83,42 @@
                 ctx.save();
                 ctx.translate(-camX, -camY);
 
-                // Tło i granice
-                ctx.fillStyle = "#fff";
-                ctx.fillRect(0,0, mapSize, mapSize);
-                ctx.strokeStyle = '#333';
-                ctx.lineWidth = 10;
+                // Siatka tła (tylko tam gdzie widać)
+                ctx.strokeStyle = "rgba(0,0,0,0.05)";
+                ctx.beginPath();
+                for(let x=0; x<=mapSize; x+=60) { ctx.moveTo(x,0); ctx.lineTo(x,mapSize); }
+                for(let y=0; y<=mapSize; y+=60) { ctx.moveTo(0,y); ctx.lineTo(mapSize,y); }
+                ctx.stroke();
+
+                ctx.strokeStyle = '#333'; ctx.lineWidth = 10;
                 ctx.strokeRect(0, 0, mapSize, mapSize);
 
-                // Jedzenie
                 food.forEach(f => {
-                    ctx.fillStyle = f.color;
-                    ctx.beginPath();
-                    ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
-                    ctx.fill();
+                    ctx.fillStyle = f.color; ctx.beginPath();
+                    ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2); ctx.fill();
                 });
 
-                // Wirusy
                 viruses.forEach(v => {
-                    ctx.fillStyle = "#33ff33";
-                    ctx.beginPath();
-                    for(let i=0; i<16; i++){
-                        let angle = (i/16) * Math.PI * 2;
-                        let r = (i%2 === 0) ? v.size : v.size * 1.15;
-                        ctx.lineTo(v.x + Math.cos(angle)*r, v.y + Math.sin(angle)*r);
-                    }
-                    ctx.closePath();
-                    ctx.fill();
+                    ctx.fillStyle = "#33ff33"; ctx.beginPath();
+                    ctx.arc(v.x, v.y, v.size, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = "#2ecc71"; ctx.lineWidth = 4; ctx.stroke();
                 });
 
-                // Gracze
                 for (let id in players) {
                     const p = players[id];
-                    if (!p.cells) continue;
+                    if(!p.cells) continue;
                     p.cells.forEach(cell => {
-                        ctx.fillStyle = p.color;
-                        ctx.beginPath();
-                        ctx.arc(cell.x, cell.y, cell.size, 0, Math.PI * 2);
-                        ctx.fill();
-                        
-                        ctx.fillStyle = "white";
-                        ctx.font = `bold ${cell.size/3}px Arial`;
-                        ctx.textAlign = "center";
+                        ctx.fillStyle = p.color; ctx.beginPath();
+                        ctx.arc(cell.x, cell.y, cell.size, 0, Math.PI * 2); ctx.fill();
+                        ctx.fillStyle = "white"; ctx.font = "bold 14px Arial"; ctx.textAlign = "center";
                         ctx.fillText(p.name, cell.x, cell.y);
                     });
                 }
                 ctx.restore();
 
-                const sorted = Object.values(players).sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 10);
-                document.getElementById('leaderList').innerHTML = sorted.map((p, i) => 
-                    `<div class="leader-item"><span>${i+1}. ${p.name}</span><span>${Math.floor(p.score || 0)}</span></div>`
+                const sorted = Object.values(players).sort((a,b) => b.score - a.score).slice(0,10);
+                document.getElementById('leaderList').innerHTML = sorted.map((p,i) => 
+                    `<div class="leader-item"><span>${i+1}. ${p.name}</span><span>${Math.floor(p.score)}</span></div>`
                 ).join('');
             }
             requestAnimationFrame(draw);
